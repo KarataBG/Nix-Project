@@ -1,18 +1,18 @@
 { pkgs ? import <nixpkgs> {} }:
 
 let
-     # Функция за извличане на owner и repo от GitHub URL
+     # Функция за извличане на website, owner и repo от GitHub URL
   parseGitHubUrl = url: let
     parts = pkgs.lib.strings.splitString "/" url;
     websiteSource = builtins.elemAt parts 2;
-    owner = builtins.elemAt parts 3; # Третият елемент е owner
-    repo = builtins.elemAt parts 4;  # Четвъртият елемент е repo
+    owner = builtins.elemAt parts 3;
+    repo = builtins.elemAt parts 4;
   in
-    { websiteSource = websiteSource; owner = owner; repo = repo; }; # Връщаме set с owner и repo
+    { websiteSource = websiteSource; owner = owner; repo = repo; };
 
   generatePackage = { url, rev, tag, option, hash }:
     let
-      parsed = parseGitHubUrl url; # Извличане на owner и repo
+      parsed = parseGitHubUrl url;
       websiteSource = parsed.websiteSource;
       owner = parsed.owner;
       repo = parsed.repo;
