@@ -43,13 +43,57 @@
         };
       in
         if option == 1 then
-          # Option 1: direct python application build standard nix-2 packet
-          pkgs.python3Packages.buildPythonApplication {
+          # Option 1: direct application build standard nix-2 packet
+          # pkgs.python3Packages.buildPythonApplication {
+          pkgs.stdenv.mkDerivation rec {
+
+
+            buildInputs = with pkgs;[ python3 go rustc ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+
+            # Python build phase (if you have Python code)
+            buildPhasePython = ''
+              echo "Building Python app"
+              python3 setup.py build
+            '';
+
+            # Go build phase (if you have Go code)
+            buildPhaseGo = ''
+              echo "Building Go app"
+              go build -o my-go-app
+            '';
+
+            # Rust build phase (if you have Rust code)
+            buildPhaseRust = ''
+              echo "Building Rust app"
+              cargo build --release
+            '';
+
+            installPhase = ''
+              echo "Installing Python, Go, and Rust outputs..."
+              mkdir -p $out/bin
+
+              # Install the Python binary
+              cp -r dist/* $out/
+
+              # Install the Go binary
+              cp my-go-app $out/bin/
+
+              # Install the Rust binary
+              cp target/release/my-rust-app $out/bin/
+            '';
+
             inherit (package) name version src meta;
-            pyproject = true;
-            dependencies = with pkgs.python3Packages; [
-              setuptools ply pillow
-            ];
+
+            # buildInputs = with pkgs.python3Packages; [setuptools ply pillow];
+            # installPhase = ''
+                    # mkdir -p $out/bin
+                    # cp -r $src/* $out/
+                  # '';
+            # pyproject = true;
+            # dependencies = with pkgs.python3Packages; [
+              # setuptools ply pillow
+            # ];
           }
         else if option == 2 then
           # Option 2: returns a flake with the package
