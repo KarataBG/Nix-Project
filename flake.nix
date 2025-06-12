@@ -17,7 +17,9 @@
       in
         { websiteSource = websiteSource; owner = owner; repo = repo; };
 
-      # Generate the package based on input parameters
+      # Generate the package based on input parameters          
+      # naprawi prowerkata koi ezik e
+
       generatePackage = { url, rev, tag, option, hash }: let
         parsed = parseGitHubUrl url;
 
@@ -41,7 +43,7 @@
         };
       in
         if option == 1 then
-          # Option 1: direct python application build
+          # Option 1: direct python application build standard nix-2 packet
           pkgs.python3Packages.buildPythonApplication {
             inherit (package) name version src meta;
             pyproject = true;
@@ -74,10 +76,19 @@
           in
             packageFlake
         else if option == 3 then
-          {
-            inherit (pkgs) fetchFromGitHub;
-            inherit (package) name version src;
-          }
+          # Defines package for callPackage {}
+          let
+            packageFile = pkgs.stdenv.mkDerivation rec{
+            inherit (package) name version src meta;
+          };
+          in
+           packageFile
+
+          # {
+          #   inherit (pkgs) fetchFromGitHub;
+          #   inherit (package) name version src;
+          # }
+
         else
           throw "Invalid option. Please choose 1, 2, or 3.";
 
