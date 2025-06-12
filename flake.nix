@@ -51,11 +51,28 @@
           }
         else if option == 2 then
           # Option 2: returns a flake with the package
-          {
-            outputs = { self, nixpkgs }: {
-              packages.x86_64-linux.default = pkgs.python3Packages.buildPythonApplication (package);
+          let
+            packageFlake = {
+              description = "A flake containing the package";
+
+              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+
+              outputs = { self, nixpkgs }: 
+                let
+                  system = "x86_64-linux";
+                  pkgs = import nixpkgs { inherit system; };
+                in {
+                  packages.${system}.default = {
+                    inherit name version src;
+                    meta = {
+                      description = package.meta.description;
+                      license = package.meta.license;
+                    };
+                  };
+                };
             };
-          }
+          in
+            packageFlake
         else if option == 3 then
           {
             inherit (pkgs) fetchFromGitHub;
