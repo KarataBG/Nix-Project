@@ -18,7 +18,6 @@
         { websiteSource = websiteSource; owner = owner; repo = repo; };
 
       # Generate the package based on input parameters          
-      # naprawi prowerkata koi ezik e
 
       generatePackage = { url, rev, tag, option, hash }: let
         parsed = parseGitHubUrl url;
@@ -49,38 +48,51 @@
 
 
             buildInputs = with pkgs;[ python3 go rustc ];
-            nativeBuildInputs = [ pkgs.makeWrapper ];
+            nativeBuildInputs = with pkgs;[ makeWrapper python3Packages.setuptools];
+            
 
-            # Python build phase (if you have Python code)
-            buildPhasePython = ''
-              echo "Building Python app"
-              python3 setup.py build
-            '';
+            buildPhase = ''
+              # Build Python package
+              if [ -d "python" ]; then
+                python3 setup.py install
+              fi
 
-            # Go build phase (if you have Go code)
-            buildPhaseGo = ''
-              echo "Building Go app"
-              go build -o my-go-app
-            '';
+              # Build Go package
+              if [ -d "go" ]; then
+                cd ${repo}
+                go build -o FILENAME
+              fi
 
-            # Rust build phase (if you have Rust code)
-            buildPhaseRust = ''
-              echo "Building Rust app"
-              cargo build --release
+              # Build Rust package
+              if [ -d "rust" ]; then
+                cd ${repo}
+                cargo build --release
+              fi
             '';
 
             installPhase = ''
-              echo "Installing Python, Go, and Rust outputs..."
               mkdir -p $out/bin
 
-              # Install the Python binary
-              cp -r dist/* $out/
+              # Python: If a Python binary is generated
+              if [ -f "${repo}-automated-package" ]; then
+                cp ${repo}-automated-package $out/bin/
+              else
+                echo "Python binary not found!"
+              fi
 
-              # Install the Go binary
-              cp my-go-app $out/bin/
+              # Go: If the Go binary is generated
+              if [ -f "go/${repo}-automated-package" ]; then
+                cp go/${repo}-automated-package $out/bin/
+              else
+                echo "Go binary not found!"
+              fi
 
-              # Install the Rust binary
-              cp target/release/my-rust-app $out/bin/
+              # Rust: If the Rust binary is generated
+              if [ -f "rust/target/release/${repo}-automated-package" ]; then
+                cp rust/target/release/${repo}-automated-package $out/bin/
+              else
+                echo "Rust binary not found!"
+              fi
             '';
 
             inherit (package) name version src meta;
