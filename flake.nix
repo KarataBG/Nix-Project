@@ -47,53 +47,63 @@
           pkgs.stdenv.mkDerivation rec {
 
 
-            buildInputs = with pkgs;[ python3 go rustc ];
+            buildInputs = with pkgs;[ python3 go rustc cargo ];
             nativeBuildInputs = with pkgs;[ makeWrapper python3Packages.setuptools];
             
-
             buildPhase = ''
-              # Build Python package
-              if [ -d "python" ]; then
-                python3 setup.py install
-              fi
-
-              # Build Go package
-              if [ -d "go" ]; then
-                cd ${repo}
-                go build -o FILENAME
-              fi
-
-              # Build Rust package
-              if [ -d "rust" ]; then
-                cd ${repo}
-                cargo build --release
-              fi
+              ${pkgs.python3.interpreter} setup.py build
             '';
-
             installPhase = ''
-              mkdir -p $out/bin
-
-              # Python: If a Python binary is generated
-              if [ -f "${repo}-automated-package" ]; then
-                cp ${repo}-automated-package $out/bin/
-              else
-                echo "Python binary not found!"
-              fi
-
-              # Go: If the Go binary is generated
-              if [ -f "go/${repo}-automated-package" ]; then
-                cp go/${repo}-automated-package $out/bin/
-              else
-                echo "Go binary not found!"
-              fi
-
-              # Rust: If the Rust binary is generated
-              if [ -f "rust/target/release/${repo}-automated-package" ]; then
-                cp rust/target/release/${repo}-automated-package $out/bin/
-              else
-                echo "Rust binary not found!"
-              fi
+              ${pkgs.python3.interpreter} setup.py install --prefix=$out
             '';
+
+            # buildPhase = ''
+            #   echo "Debug build phase..."
+
+            #   # Build Python package
+            #   if [ -d "python" ]; then
+            #   python3 setup.py build
+            #   python3 setup.py install --prefix=$out
+            #   echo "Python build complete."
+            #   fi
+
+            #   # Build Go package
+            #   if [ -d "go" ]; then
+            #     cd ${repo}
+            #     go build -o FILENAME
+            #   fi
+
+            #   # Build Rust package
+            #   if [ -d "rust" ]; then
+            #     # cd ${repo}
+            #     cargo build --release
+            #   fi
+            # '';
+
+            # installPhase = ''
+            #   mkdir -p $out/bin
+
+            #   # Python: If a Python binary is generated
+            #   if [ -f "${repo}" ]; then
+            #     cp ${repo} $out/bin/
+            #   else
+            #     echo "Python binary not found!"
+            #   fi
+
+            #   # Go: If the Go binary is generated
+            #   if [ -f "go/${repo}-automated-package" ]; then
+            #     cp go/${repo}-automated-package $out/bin/
+            #   else
+            #     echo "Go binary not found!"
+            #   fi
+
+            #   # Rust: If the Rust binary is generated
+            #   if [ -f "target/release/${repo}" ]; then
+            #     cp target/release/${repo} $out/bin/
+            #   else
+            #     echo "Rust binary not found!"
+            #   fi
+            # '';
 
             inherit (package) name version src meta;
 
