@@ -9,7 +9,8 @@
       pkgs = import nixpkgs { inherit system; };
 
       # Parse GitHub URL for extracting owner/repo information
-      parseGitHubUrl = url: let
+      parseGitHubUrl = url: 
+      let
         parts = pkgs.lib.strings.splitString "/" url;
         websiteSource = builtins.elemAt parts 2;
         owner = builtins.elemAt parts 3;
@@ -18,29 +19,47 @@
         { websiteSource = websiteSource; owner = owner; repo = repo; };
 
 
-        
+      URLParser = {url, rev ? "", version ? "1.0.0", hash }:
+        let
+          parsed = parseGitHubUrl url;
 
+          owner = parsed.owner;
+          repo = parsed.repo;
+          websiteSource = parsed.websiteSource;
+
+          
+
+          fetchGitHub = pkgs.fetchFromGitHub {
+            inherit owner repo hash rev version;
+          };
+          
+          fetchGitLab = pkgs.fetchFromGitLab {
+            inherit owner repo hash rev version;
+          };
+
+          fetchGitiles = pkgs.fetchFromGitiles {
+            inherit url hash rev version;
+          };
+
+          fetchCrate = pkgs.fetchFromGitiles {
+
+            inherit repo hash rev version;
+          };
+        in
+          if websiteSource == "github.com" then fetchGitHub
+          else if websiteSource == "gitlab.com" then fetchGitLab
+          else if websiteSource == "chromium.googlesource.com" then fetchGitiles
+          else if websiteSource == "creates.io" then fetchCrate
+          else throw "Unsuported website";
 
       # Generate the package based on input parameters  
       generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1, hash, vendorHash ? null }: let
-        parsed = parseGitHubUrl url;
+        
+        src = URLParser { url = url; rev = rev; version = version; hash = hash; };
 
-        owner = parsed.owner;
-        repo = parsed.repo;
-
+        repo = (parseGitHubUrl url).repo;
         name = "${repo}-automated-package";
-        inherit version;
-
-
-        src = pkgs.fetchFromGitHub {
-          inherit owner repo hash rev version;
-          # rev = rev;
-          # tag = "v1.5.1";
-          # hash = hash;
-        };
-
-
-
+        
         package = {
           inherit name version src;
           meta = {
@@ -50,17 +69,17 @@
         };
 
         
-          # Detect the language based on common files
-          isPython = builtins.pathExists "${src}/setup.py"; 
-          isPyProject = builtins.pathExists "${src}/pyproject.toml";
-          isGo = builtins.pathExists "${src}/go.mod";
-          isRust = builtins.pathExists "${src}/Cargo.toml";
-          isCargoLock = builtins.pathExists "${src}/Cargo.lock";
+        # Detect the language based on common files
+        isPython = builtins.pathExists "${src}/setup.py"; 
+        isPyProject = builtins.pathExists "${src}/pyproject.toml";
+        isGo = builtins.pathExists "${src}/go.mod";
+        isRust = builtins.pathExists "${src}/Cargo.toml";
+        isCargoLock = builtins.pathExists "${src}/Cargo.lock";
 
-          rustCargoLock = if isRust && isCargoLock then
+        rustCargoLock = if isRust && isCargoLock then
           let fixupLockFile = path: (builtins.readFile path);
           in {lockFileContents = fixupLockFile "${src}/Cargo.lock";}
-          else null;
+        else null;
       
       in     
 
@@ -82,17 +101,10 @@
             ];            
             }
           else if isGo then
-
-            
-
             pkgs.buildGoModule rec { 
-              inherit src name version;
+              inherit src name version vendorHash;
+              # modRoot = "cmd/jwx";
 
-              #jwx vendorHash
-              # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
-              vendorHash = null;
-              # vendorHash = vendorHashComputed;
-              # vendorSha256 = vendorHashComputed;
               }
           else if isRust then
             pkgs.rustPlatform.buildRustPackage rec{ 
@@ -139,8 +151,6 @@
           throw "Invalid option. Please choose 1, 2, or 3.";
 
     in {
-
-      inherit (pkgs.lib) fakeHash fakeSha256;
       #python 
       packages.${system} = {
         examplePackage1 = generatePackage {
@@ -148,7 +158,6 @@
           # rev = "5295c19";
           # version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          # hash = "";
           option = 1;  # options - 1 2 3
         };
 
@@ -158,7 +167,6 @@
           # rev = "5295c19";
           # version = "0.7.6";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
-          # hash = "";
           option = 1;  # options - 1 2 3
         };
 
@@ -168,6 +176,7 @@
           rev = "a68b08e";
           version = "v3.0.6";
           hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
+          vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           option = 1;  # options - 1 2 3
         };
         examplePackage4 = generatePackage {
@@ -197,5 +206,6 @@
 # sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=
 # cy
 # sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=
-# vendorhash sha256-43Mi3vVvIvRRP3PGbKQlKewbQwpI7vD48GE0v6IpZ88=
+# vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
 # jwx
+             
