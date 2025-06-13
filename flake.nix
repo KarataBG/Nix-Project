@@ -22,7 +22,7 @@
 
 
       # Generate the package based on input parameters  
-      generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1, hash }: let
+      generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1, hash, vendorHash ? null }: let
         parsed = parseGitHubUrl url;
 
         owner = parsed.owner;
@@ -61,28 +61,6 @@
           let fixupLockFile = path: (builtins.readFile path);
           in {lockFileContents = fixupLockFile "${src}/Cargo.lock";}
           else null;
-
-
-          # Check if the vendor directory exists
-  vendorExists = builtins.pathExists "${src}/vendor";
-
-  # Compute the vendor hash or go.sum hash
-  vendorHashInter = if vendorExists then
-    builtins.hashDir "${src}/vendor"
-  else
-    builtins.hashFile "sha256" "${src}/go.sum";  # Compute hash for go.sum if no vendor directory
-
-  # Generate base64 encoded hash using runCommand
-  vendorHashBase64 = pkgs.runCommand "base64-encode" {
-    buildInputs = [ pkgs.coreutils ];  # Ensures base64 command is available
-    src = vendorHashInter;  # Pass the hash as source
-  } ''
-    echo -n ${vendorHashInter} | base64 -w0 > $out
-  '';
-
-  # Read the result and ensure it is a valid sha256 format
-  vendorHashComputed = "sha256-" + builtins.toString (builtins.readFile vendorHashBase64);
-
       
       in     
 
@@ -104,13 +82,17 @@
             ];            
             }
           else if isGo then
+
+            
+
             pkgs.buildGoModule rec { 
               inherit src name version;
+
               #jwx vendorHash
-              # vendorHash = "sha256-43Mi3vVvIvRRP3PGbKQlKewbQwpI7vD48GE0v6IpZ88=";
-              # vendorHash = "";
+              # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
+              vendorHash = null;
               # vendorHash = vendorHashComputed;
-              vendorSha256 = vendorHashComputed;
+              # vendorSha256 = vendorHashComputed;
               }
           else if isRust then
             pkgs.rustPlatform.buildRustPackage rec{ 
@@ -188,14 +170,17 @@
           hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
           option = 1;  # options - 1 2 3
         };
+        examplePackage4 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          rev = "77ea96a";
+          version = "v1.5.1";
+          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
+          option = 1;  # options - 1 2 3
+        };
       };
-      # if rev and version are not given builds the latest
 
-      # inherit (generatePackage) src isPython isPyProject isGo isRust computedHash;
     };
 }
-
-# samo hasha zawisi koe ste wzeme - naprawi se nmlc hash i link evmar i stana nmlc packet s ime evmar
 
 #python
 # sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=
