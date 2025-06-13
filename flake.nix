@@ -22,21 +22,27 @@
 
 
       # Generate the package based on input parameters  
-      generatePackage = { url, rev, version, option, hash }: let
+      generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1, hash }: let
         parsed = parseGitHubUrl url;
 
         owner = parsed.owner;
         repo = parsed.repo;
 
         name = "${repo}-automated-package";
-        # version = version;
         inherit version;
 
+        # computedHash = builtins.hashFile "sha256" (pkgs.fetchFromGitHub {
+        #   inherit owner repo rev version;
+        #   hash = hash;
+        # });
+
         src = pkgs.fetchFromGitHub {
-          inherit owner repo rev;
-          # rev = release;
-          hash = hash;
+          inherit owner repo rev version hash;
+          # hash = hash;
         };
+
+
+
         package = {
           inherit name version src;
           meta = {
@@ -51,19 +57,23 @@
           isPyProject = builtins.pathExists "${src}/pyproject.toml";
           isGo = builtins.pathExists "${src}/go.mod";
           isRust = builtins.pathExists "${src}/Cargo.toml";
+          isCargoLock = builtins.pathExists "${src}/Cargo.lock";
 
-          # isPyProject = builtins.hasAttr "pyproject.toml" src;
-          # isGo = builtins.hasAttr "go.mod" src;
-          # isRust = builtins.hasAttr "Cargo.toml" src; 
+          rustCargoLock = if isRust && isCargoLock then
+          let fixupLockFile = path: (builtins.readFile path);
+          in {lockFileContents = fixupLockFile "${src}/Cargo.lock";}
+          else null;
+
+           vendorHash = if isGo && builtins.pathExists "${src}/vendor" then
+            builtins.hashFile "sha256" "${src}/vendor"
+            else null;
+
+
       
-      in          
+      in     
 
         if option == 1 then
           # Option 1: direct application build standard nix-2 packet
-          # pkgs.python3Packages.buildPythonApplication {
-
-
-        # inherit isPython isPyProject isGo isRust;
 
           if isPython then
             if isPyProject then pkgs.python3Packages.buildPythonApplication rec {
@@ -75,99 +85,24 @@
             }
             else pkgs.python3Packages.buildPythonApplication rec {
               inherit src name version; 
-              pyproject = true;
               dependencies = with pkgs.python3Packages; [
               setuptools ply pillow
             ];            
             }
           else if isGo then
-            pkgs.buildGoModule { inherit src name version; }
+            pkgs.buildGoModule rec { 
+              inherit src name version; 
+              vendorHash = vendorHash;
+
+              }
           else if isRust then
-            pkgs.buildRustPackage { inherit src name version; }
+            pkgs.rustPlatform.buildRustPackage rec{ 
+              inherit src name version; 
+              cargoLock = rustCargoLock;
+            }
           else
             throw "Unknown language or missing necessary build files. Please check your source structure."
-  
 
-
-
-
-
-
-
-
-
-
-
-          # pkgs.stdenv.mkDerivation rec {
-
-
-          #   buildInputs = with pkgs;[ python3 go rustc cargo ];
-          #   nativeBuildInputs = with pkgs;[ makeWrapper python3Packages.setuptools];
-
-          #   buildPhase = ''
-          #     ${pkgs.python3.interpreter} setup.py build
-          #   '';
-          #   installPhase = ''
-          #     ${pkgs.python3.interpreter} setup.py install
-          #   '';
-
-          #   buildPhase = ''
-          #     echo "Debug build phase..."
-
-          #     # Build Python package
-          #     if [ -d "python" ]; then
-          #     python3 setup.py build
-          #     python3 setup.py install --prefix=$out
-          #     echo "Python build complete."
-          #     fi
-
-          #     # Build Go package
-          #     if [ -d "go" ]; then
-          #       cd ${repo}
-          #       go build -o FILENAME
-          #     fi
-
-          #     # Build Rust package
-          #     if [ -d "rust" ]; then
-          #       # cd ${repo}
-          #       cargo build --release
-          #     fi
-          #   '';
-
-          #   installPhase = ''
-          #     mkdir -p $out/bin
-
-          #     # Python: If a Python binary is generated
-          #     if [ -f "${repo}" ]; then
-          #       cp ${repo} $out/bin/
-          #     else
-          #       echo "Python binary not found!"
-          #     fi
-
-          #     # Go: If the Go binary is generated
-          #     if [ -f "go/${repo}-automated-package" ]; then
-          #       cp go/${repo}-automated-package $out/bin/
-          #     else
-          #       echo "Go binary not found!"
-          #     fi
-
-          #     # Rust: If the Rust binary is generated
-          #     if [ -f "target/release/${repo}" ]; then
-          #       cp target/release/${repo} $out/bin/
-          #     else
-          #       echo "Rust binary not found!"
-          #     fi
-          #   '';
-
-          #   inherit (package) name version src meta;
-
-          #   # buildInputs = with pkgs.python3Packages; [setuptools ply pillow];
-          #   # installPhase = ''
-          #           # mkdir -p $out/bin
-          #           # cp -r $src/* $out/
-          #         # '';
-            
-          # }
         else if option == 2 then
           # Option 2: returns a flake with the package
           let
@@ -201,35 +136,62 @@
           in
            packageFile
 
-          # {
-          #   inherit (pkgs) fetchFromGitHub;
-          #   inherit (package) name version src;
-          # }
-
         else
           throw "Invalid option. Please choose 1, 2, or 3.";
 
     in {
-      packages.${system}.examplePackage1 = generatePackage {
-        url = "https://github.com/LoLei/razer-cli";
-        rev = "9ce5688";
-        version = "2.3.0";
-        hash = "sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=";
-        option = 1;  # options - 1 2 3
-      };
+      #python 
+      packages.${system} = {
+        examplePackage1 = generatePackage {
+          url = "https://github.com/OpenTTD/nml";
+          # rev = "5295c19";
+          # version = "0.7.6";
+          hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
+          # hash = "";
+          option = 1;  # options - 1 2 3
+        };
 
-      inherit (generatePackage) src isPython isPyProject isGo isRust;
+        #rust
+        examplePackage2 = generatePackage {
+          url = "https://github.com/evmar/n2";
+          # rev = "5295c19";
+          # version = "0.7.6";
+          hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
+          # hash = "";
+          option = 1;  # options - 1 2 3
+        };
+
+      #go
+        examplePackage3 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          # rev = "5295c19";
+          # version = "0.7.6";
+          hash = "sha256-2qInkF5kUXKXlxyRpe3jZxxtfvkkIFly1m46UKzCjLs=";
+          # hash = "";
+          option = 1;  # options - 1 2 3
+        };
+      };
+      # if rev and version are not given builds the latest
+
+      # inherit (generatePackage) src isPython isPyProject isGo isRust computedHash;
     };
 }
 
-#ako podam rev wzima nmlc dori i drugite da sa na razer
+# samo hasha zawisi koe ste wzeme - naprawi se nmlc hash i link evmar i stana nmlc packet s ime evmar
 
-
+#python
 # sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=
 # razer 2.3.0
-
 # sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0= 
-# nmlc
+# nmlc 0.7.6
 
-# sha256-jjCMxY0PEar9F4O4vu5niU2U74rxoaBczqW5CKLEKvk=
-# razer
+#rust
+# sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=
+# cargohash sha256-+nr9v2N6BIDv0f4K/J1K0vijeIkrolfeXvdBGDHqwVU=
+# evmar
+
+#go
+# sha256-2qInkF5kUXKXlxyRpe3jZxxtfvkkIFly1m46UKzCjLs=
+# cy
+# vendorhash sha256-43Mi3vVvIvRRP3PGbKQlKewbQwpI7vD48GE0v6IpZ88=
+# jwx
