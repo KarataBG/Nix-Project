@@ -1,7 +1,7 @@
 {
   description = "Flake wrapping GitHub packages with options";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
   outputs = { self, nixpkgs }: 
     let
@@ -31,13 +31,11 @@
         name = "${repo}-automated-package";
         inherit version;
 
-        # computedHash = builtins.hashFile "sha256" (pkgs.fetchFromGitHub {
-        #   inherit owner repo rev version;
-        #   hash = hash;
-        # });
 
         src = pkgs.fetchFromGitHub {
-          inherit owner repo rev version hash;
+          inherit owner repo hash rev version;
+          # rev = rev;
+          # tag = "v1.5.1";
           # hash = hash;
         };
 
@@ -64,10 +62,26 @@
           in {lockFileContents = fixupLockFile "${src}/Cargo.lock";}
           else null;
 
-           vendorHash = if isGo && builtins.pathExists "${src}/vendor" then
-            builtins.hashFile "sha256" "${src}/vendor"
-            else null;
 
+          # Check if the vendor directory exists
+  vendorExists = builtins.pathExists "${src}/vendor";
+
+  # Compute the vendor hash or go.sum hash
+  vendorHashInter = if vendorExists then
+    builtins.hashDir "${src}/vendor"
+  else
+    builtins.hashFile "sha256" "${src}/go.sum";  # Compute hash for go.sum if no vendor directory
+
+  # Generate base64 encoded hash using runCommand
+  vendorHashBase64 = pkgs.runCommand "base64-encode" {
+    buildInputs = [ pkgs.coreutils ];  # Ensures base64 command is available
+    src = vendorHashInter;  # Pass the hash as source
+  } ''
+    echo -n ${vendorHashInter} | base64 -w0 > $out
+  '';
+
+  # Read the result and ensure it is a valid sha256 format
+  vendorHashComputed = "sha256-" + builtins.toString (builtins.readFile vendorHashBase64);
 
       
       in     
@@ -91,9 +105,12 @@
             }
           else if isGo then
             pkgs.buildGoModule rec { 
-              inherit src name version; 
-              vendorHash = vendorHash;
-
+              inherit src name version;
+              #jwx vendorHash
+              # vendorHash = "sha256-43Mi3vVvIvRRP3PGbKQlKewbQwpI7vD48GE0v6IpZ88=";
+              # vendorHash = "";
+              # vendorHash = vendorHashComputed;
+              vendorSha256 = vendorHashComputed;
               }
           else if isRust then
             pkgs.rustPlatform.buildRustPackage rec{ 
@@ -109,7 +126,7 @@
             packageFlake = {
               description = "A flake containing the package";
 
-              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
               outputs = { self, nixpkgs }: 
                 let
@@ -140,6 +157,8 @@
           throw "Invalid option. Please choose 1, 2, or 3.";
 
     in {
+
+      inherit (pkgs.lib) fakeHash fakeSha256;
       #python 
       packages.${system} = {
         examplePackage1 = generatePackage {
@@ -163,11 +182,10 @@
 
       #go
         examplePackage3 = generatePackage {
-          url = "https://github.com/cfoust/cy";
-          # rev = "5295c19";
-          # version = "0.7.6";
-          hash = "sha256-2qInkF5kUXKXlxyRpe3jZxxtfvkkIFly1m46UKzCjLs=";
-          # hash = "";
+          url = "https://github.com/lestrrat-go/jwx";
+          rev = "a68b08e";
+          version = "v3.0.6";
+          hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
           option = 1;  # options - 1 2 3
         };
       };
@@ -191,7 +209,8 @@
 # evmar
 
 #go
-# sha256-2qInkF5kUXKXlxyRpe3jZxxtfvkkIFly1m46UKzCjLs=
+# sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=
 # cy
+# sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=
 # vendorhash sha256-43Mi3vVvIvRRP3PGbKQlKewbQwpI7vD48GE0v6IpZ88=
 # jwx
