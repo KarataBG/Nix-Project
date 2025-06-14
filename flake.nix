@@ -46,30 +46,65 @@
             pname = repo;
             inherit hash version;
           };
-        in if websiteSource == "github.com" then
-          fetchGitHub
-        else if websiteSource == "gitlab.com" then
-          fetchGitLab
-        else if websiteSource == "chromium.googlesource.com" then
-          fetchGitiles
-        else if websiteSource == "crates.io" then
-          fetchCrate
-        else
+        in if websiteSource == "github.com" then {
+          drv = fetchGitHub;
+          srcString = ''
+            pkgs.fetchFromGitHub {
+              repo = "${repo}";
+              owner = "${owner}";
+              tag = "${version}";
+              hash = "${hash}";
+            };
+          '';
+        } else if websiteSource == "gitlab.com" then {
+          drv = fetchGitLab;
+          srcString = ''
+            pkgs.fetchFromGitLab {
+              repo = "${repo}";
+              owner = "${owner}";
+              tag = "${version}";
+              version = "${version}";
+            };
+          '';
+        } else if websiteSource == "chromium.googlesource.com" then {
+          drv = fetchGitiles;
+          srcString = ''
+            pkgs.fetchFromGitiles {
+              url = "${url}";
+              hash = "${hash}";
+              rev = "${rev}";
+              hash = "${hash}";
+            };
+          '';
+        } else if websiteSource == "crates.io" then {
+          drv = fetchCrate;
+          srcString = ''
+            pkgs.fetchCrate {
+              pname = "${repo}";
+              hash = "${hash}";
+              version = "${version}";
+            };
+          '';
+        } else
           throw "Unsuported website";
 
       # Generate the package based on input parameters
       generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1
         , hash ? lib.trace "Use the generated hash as input" lib.fakeHash
-        , vendorHash ? pkgs.lib.trace "Use the generated vendorHash as input" lib.fakeHash
+        , vendorHash ?
+          pkgs.lib.trace "Use the generated vendorHash as input" lib.fakeHash
         , extraArgs ? { } }:
         let
 
-          src = URLParser {
+          urlParser = URLParser {
             url = url;
             rev = rev;
             version = version;
             hash = hash;
           };
+
+          src = urlParser.drv;
+          srcString = urlParser.srcString;
 
           repo = (parseGitHubUrl url).repo;
           name = "${repo}-automated-package";
@@ -107,16 +142,15 @@
                 if builtins.hasAttr part pkg then
                   pkg.${part}
                 else
-                  throw "Package '${name}' not found in pkgs.")
-                packageHead packageTail;
+                  throw "Package '${name}' not found in pkgs.") packageHead
+                packageTail;
             in resolvedPackage;
 
         in if option == 1 then
         # Option 1: direct application build standard nix-2 packet
-
           if isPython then
             if isPyProject then
-              pkgs.python3Packages.buildPythonApplication rec {
+              pkgs.python3Packages.buildPythonApplication (rec {
                 inherit src name version;
                 pyproject = true;
                 dependencies = with pkgs.python3Packages; [
@@ -124,7 +158,7 @@
                   ply
                   pillow
                 ];
-              }
+              } // extraArgs)
             else
               pkgs.python3Packages.buildPythonApplication rec {
                 inherit src name version;
@@ -137,10 +171,9 @@
           else if isGo then
 
             pkgs.buildGoModule rec {
-
-
               inherit src name version vendorHash;
 
+              # modRoot = "";
               modRoot = if builtins.hasAttr "modRoot" extraArgs then
                 extraArgs.modRoot
               else
@@ -168,7 +201,21 @@
 
         else if option == 2 then
         # Option 2: returns a flake with the package
+         generateFlake package srcString
+        else if option == 3 then
+        # Defines package for callPackage {}
           let
+            packageFile = pkgs.stdenv.mkDerivation rec {
+              inherit (package) name version src meta;
+            };
+          in packageFile
+
+        else
+          throw "Invalid option. Please choose 1, 2, or 3.";
+      
+      generateFlake = {package, srcString}:
+          let
+            inherit (package) name version src;
             packageFlake = {
               description = "A flake containing the package";
 
@@ -188,20 +235,49 @@
                   };
                 };
             };
-          in packageFlake
-        else if option == 3 then
-        # Defines package for callPackage {}
-          let
-            packageFile = pkgs.stdenv.mkDerivation rec {
-              inherit (package) name version src meta;
-            };
-          in packageFile
 
-        else
-          throw "Invalid option. Please choose 1, 2, or 3.";
+            packageFlakeString = # nix #
+              ''
+              description = "A flake containing the package";
+              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+
+              outputs =
+                { self, nixpkgs }:
+                let
+                  system = "x86_64-linux";
+                  pkgs = import nixpkgs { inherit system; };
+                in
+                {
+                  packages.${system}.default = {
+                    # inherit name version src;
+                    name = ${name};
+                    src = ${srcString};
+                  };
+                };                      
+              '';
+          in packageFlake packageFlakeString;
 
     in {
       inherit pkgs;
+      inherit (generateFlake) packageFlakeString;
+      # inherit (generateFlake) packageFlakeString;
+
+      # legacyPackages.${system}.generatedFlake = packageFlakeString;
+
+      templates.rust = {
+        path = ./rust;
+        description = "A simple Rust/Cargo project";
+        welcomeText = ''
+          # Simple Rust/Cargo Template
+          ## Intended usage
+          The intended usage of this flake is to create a new Rust project.
+
+          ## More info
+          - [Rust language](https://www.rust-lang.org/)
+          - [Rust on the NixOS Wiki](https://wiki.nixos.org/wiki/Rust)
+        '';
+      };
+
       #python
       packages.${system} = {
         examplePackage1 = generatePackage {
