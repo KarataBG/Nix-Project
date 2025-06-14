@@ -54,7 +54,7 @@
               owner = "${owner}";
               tag = "${version}";
               hash = "${hash}";
-            };
+            }
           '';
         } else if websiteSource == "gitlab.com" then {
           drv = fetchGitLab;
@@ -64,7 +64,7 @@
               owner = "${owner}";
               tag = "${version}";
               version = "${version}";
-            };
+            }
           '';
         } else if websiteSource == "chromium.googlesource.com" then {
           drv = fetchGitiles;
@@ -73,8 +73,8 @@
               url = "${url}";
               hash = "${hash}";
               rev = "${rev}";
-              hash = "${hash}";
-            };
+              version = "${version}";
+            }
           '';
         } else if websiteSource == "crates.io" then {
           drv = fetchCrate;
@@ -83,7 +83,7 @@
               pname = "${repo}";
               hash = "${hash}";
               version = "${version}";
-            };
+            }
           '';
         } else
           throw "Unsuported website";
@@ -109,13 +109,13 @@
           repo = (parseGitHubUrl url).repo;
           name = "${repo}-automated-package";
 
-          package = {
-            inherit name version src;
-            meta = {
-              description = "An automatic package";
-              license = "MIT";
-            };
-          };
+          # package = {
+          #   inherit name version src;
+          #   meta = {
+          #     description = "An automatic package";
+          #     license = "MIT";
+          #   };
+          # };
 
           # Detect the language based on common files
           isPython = builtins.pathExists "${src}/setup.py";
@@ -129,6 +129,140 @@
             in { lockFileContents = fixupLockFile "${src}/Cargo.lock"; }
           else
             null;
+
+          
+          packageDRVandSTR = 
+            if isPython then
+            if isPyProject then
+              {
+                drv = pkgs.python3Packages.buildPythonApplication (rec {
+                    inherit src name version;
+                    pyproject = true;
+                    dependencies = with pkgs.python3Packages; [
+                      setuptools
+                      ply
+                      pillow
+                    ];
+                  } // extraArgs);
+
+                str = ''
+                  pkgs.python3Packages.buildPythonApplication rec {
+                    name = "${name}";
+                    version = "${version}";
+                    src = ${srcString};
+
+                    pyproject = true;
+                    dependencies = with pkgs.python3Packages; [
+                      setuptools
+                      ply
+                      pillow
+                    ];
+                    ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
+                  }
+                '';
+              }
+            else
+              {
+                drv = pkgs.python3Packages.buildPythonApplication rec {
+                inherit src name version;
+                dependencies = with pkgs.python3Packages; [
+                  setuptools
+                  ply
+                  pillow
+                ];
+                };
+
+                str = ''
+                  pkgs.python3Packages.buildPythonApplication rec {
+                    name = "${name}";
+                    version = "${version}";
+                    src = ${srcString};
+                    dependencies = with pkgs.python3Packages; [
+                      setuptools
+                      ply
+                      pillow
+                    ];
+                    ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
+
+                }
+                '';
+              }
+          else if isGo then
+            {
+              drv = pkgs.buildGoModule rec {
+              inherit src name version vendorHash;
+
+              modRoot = "";
+              # modRoot = if builtins.hasAttr "modRoot" extraArgs then
+              #   extraArgs.modRoot
+              # else
+              #   "";
+
+              buildInputs = "";
+              # buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
+              #   map resolvePackage extraArgs.buildInputs
+              # else
+              #   [ ];
+
+              doCheck = "";
+              # doCheck = if builtins.hasAttr "doCheck" extraArgs then
+              #   extraArgs.doCheck
+              # else
+              #   true;
+
+              } // extraArgs;
+
+              str = ''
+                pkgs.buildGoModule rec {
+                  name = "${name}";
+                  version = "${version}";
+                  src = ${srcString};
+                  vendorHash = ${vendorHash};
+
+                  modRoot = "";
+
+                  #TODO 
+                  # buildInputs = "";
+                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
+                    ${builtins.concatStringsSep "\n" (map resolvePackage extraArgs.buildInputs)}
+                  else
+                    [ ];
+
+                  doCheck = "";
+                  # doCheck = if builtins.hasAttr "doCheck" extraArgs then
+                  #   extraArgs.doCheck
+                  # else
+                  #   true;
+                  ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
+
+                }
+
+              '';
+            }
+            
+          else if isRust then
+            {
+              drv = pkgs.rustPlatform.buildRustPackage rec {
+                inherit src name version;
+                cargoLock = rustCargoLock;
+              } // extraArgs;
+
+              str = ''
+                pkgs.rustPlatform.buildRustPackage rec {
+                  name = "${name}";
+                  version = "${version}";
+                  src = ${srcString};
+                  
+                  cargoLock.lockFile = "''${src}/Cargo.lock";
+                  ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
+              } 
+              '';
+            }
+          else
+            throw
+            "Unknown language or missing necessary build files. Please check your source structure.";
+
+          #END END END
 
           resolvePackage = name:
             let
@@ -146,76 +280,33 @@
                 packageTail;
             in resolvedPackage;
 
-        in if option == 1 then
+        in 
+        if option == 1 then
         # Option 1: direct application build standard nix-2 packet
-          if isPython then
-            if isPyProject then
-              pkgs.python3Packages.buildPythonApplication (rec {
-                inherit src name version;
-                pyproject = true;
-                dependencies = with pkgs.python3Packages; [
-                  setuptools
-                  ply
-                  pillow
-                ];
-              } // extraArgs)
-            else
-              pkgs.python3Packages.buildPythonApplication rec {
-                inherit src name version;
-                dependencies = with pkgs.python3Packages; [
-                  setuptools
-                  ply
-                  pillow
-                ];
-              }
-          else if isGo then
-
-            pkgs.buildGoModule rec {
-              inherit src name version vendorHash;
-
-              # modRoot = "";
-              modRoot = if builtins.hasAttr "modRoot" extraArgs then
-                extraArgs.modRoot
-              else
-                "";
-
-              buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
-                map resolvePackage extraArgs.buildInputs
-              else
-                [ ];
-
-              doCheck = if builtins.hasAttr "doCheck" extraArgs then
-                extraArgs.doCheck
-              else
-                true;
-
-            }
-          else if isRust then
-            pkgs.rustPlatform.buildRustPackage rec {
-              inherit src name version;
-              cargoLock = rustCargoLock;
-            }
-          else
-            throw
-            "Unknown language or missing necessary build files. Please check your source structure."
+          packageDRVandSTR.drv 
 
         else if option == 2 then
         # Option 2: returns a flake with the package
-         generateFlake package srcString
+         generateFlake {inherit srcString packageDRVandSTR;}
         else if option == 3 then
         # Defines package for callPackage {}
-          let
-            packageFile = pkgs.stdenv.mkDerivation rec {
-              inherit (package) name version src meta;
-            };
-          in packageFile
+          null
 
+        # трябва файл с { pkgs }: + packageMEGA.str  но с extraArgs може да има проблем те ще се евал до път до деривация
+
+        #OLD
+          # let
+          #   packageFile = pkgs.stdenv.mkDerivation rec {
+          #     inherit (package) name version src meta;
+          #   };
+          # in packageFile
+        #OLD
         else
           throw "Invalid option. Please choose 1, 2, or 3.";
       
-      generateFlake = {package, srcString}:
+      generateFlake = {srcString, packageDRVandSTR}:
           let
-            inherit (package) name version src;
+            inherit (packageDRVandSTR.drv) name version src;
             packageFlake = {
               description = "A flake containing the package";
 
@@ -228,41 +319,47 @@
                 in {
                   packages.${system}.default = {
                     inherit name version src;
-                    meta = {
-                      description = package.meta.description;
-                      license = package.meta.license;
-                    };
+                    # meta = {
+                    #   description = package.meta.description;
+                    #   license = package.meta.license;
+                    # };
                   };
                 };
             };
 
             packageFlakeString = # nix #
               ''
-              description = "A flake containing the package";
-              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+              {
+                description = "A flake containing the package";
+                inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
-              outputs =
-                { self, nixpkgs }:
-                let
-                  system = "x86_64-linux";
-                  pkgs = import nixpkgs { inherit system; };
-                in
-                {
-                  packages.${system}.default = {
-                    # inherit name version src;
-                    name = ${name};
-                    src = ${srcString};
-                  };
-                };                      
+                outputs =
+                  { self, nixpkgs }:
+                  let
+                    system = "x86_64-linux";
+                    pkgs = import nixpkgs { inherit system; };
+                  in
+                  {
+                    packages.''${system}.default = ${packageDRVandSTR.str};
+                  }; 
+              }                     
               '';
-          in packageFlake packageFlakeString;
+          in { inherit packageFlake packageFlakeString;};
 
     in {
       inherit pkgs;
-      inherit (generateFlake) packageFlakeString;
-      # inherit (generateFlake) packageFlakeString;
+      inherit resolvePackage;
 
-      # legacyPackages.${system}.generatedFlake = packageFlakeString;
+      legacyPackages.${system}.generatedFlake = generatePackage {
+          url = "https://github.com/lestrrat-go/jwx";
+          rev = "a68b08e";
+          version = "v3.0.6";
+          hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
+          vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
+          # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
+          option = 2; # options - 1 2 3
+          extraArgs = { modRoot = "cmd/jwx"; };
+        };
 
       templates.rust = {
         path = ./rust;
@@ -329,11 +426,14 @@
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 1; # options - 1 2 3
-          # extraArgs = with pkgs; { buildInputs = [ pkgs.xorg.libX11 ]; };
-          extraArgs = with pkgs; {
-            buildInputs = [ "xorg.libX11" ];
+          extraArgs = with pkgs; { 
+            buildInputs = [ pkgs.xorg.libX11 ]; 
             doCheck = false;
-          };
+            };
+          # extraArgs = with pkgs; {
+          #   buildInputs = [ "xorg.libX11" ];
+          #   doCheck = false;
+          # };
         };
 
       };
