@@ -95,7 +95,21 @@
           else
             null;
 
-          
+          resolvePackage = name:
+            let
+              parts = lib.splitString "." name;
+              # uses getArrr getting the derivation of the library head
+              # example xorg.libX11 gets xorg and gets the derivation of xorg from nixpkgs
+              # iterates over the parts adding them all subParts to the head getting the derivation each time 
+              packageHead = builtins.getAttr (builtins.head parts) pkgs;
+              packageTail = builtins.tail parts;
+              resolvedPackage = builtins.foldl' (pkg: part:
+                if builtins.hasAttr part pkg then
+                  pkg.${part}
+                else
+                  throw "Package '${name}' not found in pkgs.")
+                packageHead packageTail;
+            in resolvedPackage;
 
         in if option == 1 then
         # Option 1: direct application build standard nix-2 packet
@@ -133,7 +147,7 @@
                 "";
 
               buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
-                extraArgs.buildInputs
+                map resolvePackage extraArgs.buildInputs
               else
                 [ ];
 
@@ -241,7 +255,7 @@
           option = 1; # options - 1 2 3
           # extraArgs = with pkgs; { buildInputs = [ pkgs.xorg.libX11 ]; };
           extraArgs = with pkgs; {
-            buildInputs = [ pkgs.xorg.libX11 ];
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
           };
         };
