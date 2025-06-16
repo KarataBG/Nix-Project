@@ -93,9 +93,8 @@
         , hash ? lib.trace "Use the generated hash as input" lib.fakeHash
         , vendorHash ?
           pkgs.lib.trace "Use the generated vendorHash as input" lib.fakeHash
-        , extraArgs ? { } }:
-        let
-
+        , extraArgs ? { buildInputs = []; modRoot = "" ; doCheck = true;} }:
+        let       
           urlParser = URLParser {
             url = url;
             rev = rev;
@@ -133,35 +132,35 @@
           
           packageDRVandSTR = 
             if isPython then
-            if isPyProject then
-              {
-                drv = pkgs.python3Packages.buildPythonApplication (rec {
-                    inherit src name version;
-                    pyproject = true;
-                    dependencies = with pkgs.python3Packages; [
-                      setuptools
-                      ply
-                      pillow
-                    ];
-                  } // extraArgs);
+              if isPyProject then
+                {
+                  drv = pkgs.python3Packages.buildPythonApplication (rec {
+                      inherit src name version;
+                      pyproject = true;
+                      dependencies = with pkgs.python3Packages; [
+                        setuptools
+                        ply
+                        pillow
+                      ];
+                    } // extraArgs);
 
-                str = ''
-                  pkgs.python3Packages.buildPythonApplication rec {
-                    name = "${name}";
-                    version = "${version}";
-                    src = ${srcString};
+                  str = ''
+                    pkgs.python3Packages.buildPythonApplication rec {
+                      name = "${name}";
+                      version = "${version}";
+                      src = ${srcString};
 
-                    pyproject = true;
-                    dependencies = with pkgs.python3Packages; [
-                      setuptools
-                      ply
-                      pillow
-                    ];
-                    ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
-                  }
-                '';
-              }
-            else
+                      pyproject = true;
+                      dependencies = with pkgs.python3Packages; [
+                        setuptools
+                        ply
+                        pillow
+                      ];
+                      ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
+                    }
+                  '';
+                }
+              else
               {
                 drv = pkgs.python3Packages.buildPythonApplication rec {
                 inherit src name version;
@@ -198,13 +197,13 @@
               # else
               #   "";
 
-              buildInputs = "";
+              buildInputs = [];
               # buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
               #   map resolvePackage extraArgs.buildInputs
               # else
               #   [ ];
 
-              doCheck = "";
+              doCheck = true;
               # doCheck = if builtins.hasAttr "doCheck" extraArgs then
               #   extraArgs.doCheck
               # else
@@ -212,38 +211,34 @@
 
               } // extraArgs;
 
-              str = ''
-                pkgs.buildGoModule rec {
-                  name = "${name}";
-                  version = "${version}";
-                  src = ${srcString};
-                  vendorHash = ${vendorHash};
+              str =  ''
+                  pkgs.buildGoModule rec {
+                    name = "${name}";
+                    version = "${version}";
+                    src = ${srcString};
+                    vendorHash = "${vendorHash}";
 
-                  modRoot = "";
+                    modRoot = ${if builtins.hasAttr "modRoot" extraArgs then
+                      "\"${extraArgs.modRoot}\""
+                    else "" };
+                    
+                    buildInputs = ${if builtins.hasAttr "buildInputs" extraArgs then
+                      "[${builtins.concatStringsSep " " extraArgs.buildInputs}]"
+                    else ''[]'' };
 
-                  #TODO 
-                  # buildInputs = "";
-                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then
-                    ${builtins.concatStringsSep "\n" (map resolvePackage extraArgs.buildInputs)}
-                  else
-                    [ ];
+                    doCheck = ${if builtins.hasAttr "doCheck" extraArgs then
+                      if extraArgs.doCheck then "true" else "false"
+                    else "true" };
+                  }
 
-                  doCheck = "";
-                  # doCheck = if builtins.hasAttr "doCheck" extraArgs then
-                  #   extraArgs.doCheck
-                  # else
-                  #   true;
-                  ${builtins.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "${k} = \"${builtins.toString v}\";") extraArgs)}
-
-                }
-
-              '';
+                '';
             }
             
           else if isRust then
             {
               drv = pkgs.rustPlatform.buildRustPackage rec {
                 inherit src name version;
+                # TODO ako nqma cargo.lock w src da prieme ot potrebitelq cargoHash 
                 cargoLock = rustCargoLock;
               } // extraArgs;
 
@@ -348,7 +343,8 @@
 
     in {
       inherit pkgs;
-      inherit resolvePackage;
+      # inherit resolvePackage;
+      inherit (generateFlake) packageFlakeString;
 
       legacyPackages.${system}.generatedFlake = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
@@ -358,7 +354,7 @@
           vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           option = 2; # options - 1 2 3
-          extraArgs = { modRoot = "cmd/jwx"; };
+          extraArgs = with pkgs;{ modRoot = "cmd/jwx"; buildInputs = ["xorg.libX11" "go"]; doCheck = false;};
         };
 
       templates.rust = {
@@ -417,7 +413,7 @@
           vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           option = 1; # options - 1 2 3
-          extraArgs = { modRoot = "cmd/jwx"; };
+          extraArgs = with pkgs;{ modRoot = "cmd/jwx"; buildInputs = ["xorg.libX11" "go"]; doCheck = true;};
         };
         examplePackage4 = generatePackage {
           url = "https://github.com/cfoust/cy";
