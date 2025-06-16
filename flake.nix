@@ -90,9 +90,8 @@
 
       # Generate the package based on input parameters
       generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1
-        , hash ? lib.trace "Use the generated hash as input" lib.fakeHash
-        , vendorHash ?
-          pkgs.lib.trace "Use the generated vendorHash as input" lib.fakeHash
+        , hash ? lib.trace "Generate hash for input with nix build" ""
+        , vendorHash ? lib.trace "Generate vendorHash for input with nix build" ""
         , extraArgs ? { } }:
         let       
           urlParser = URLParser {
@@ -137,6 +136,9 @@
                   drv = pkgs.python3Packages.buildPythonApplication (rec {
                       inherit src name version;
                       pyproject = true;
+                      modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+                      buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+                      doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
                       dependencies = with pkgs.python3Packages; [
                         setuptools
                         ply
@@ -172,6 +174,9 @@
               {
                 drv = pkgs.python3Packages.buildPythonApplication rec {
                 inherit src name version;
+                modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+                buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+                doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
                 dependencies = with pkgs.python3Packages; [
                   setuptools
                   ply
@@ -204,7 +209,18 @@
           else if isGo then
             {
               drv = pkgs.buildGoModule rec {
-              inherit src name version vendorHash;
+              # inherit src name version vendorHash;
+              inherit name version src vendorHash;
+
+              # modRoot = lib.debug.traceVal extraArgs.modRoot;
+
+              modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+              buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+              doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
+
+              # modRoot = "cmd/jwx";
+              # modRoot = "";
+
               } // extraArgs;
 
               str =  ''
@@ -230,6 +246,9 @@
             {
               drv = pkgs.rustPlatform.buildRustPackage rec {
                 inherit src name version;
+                modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+                buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+                doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
                 # TODO ako nqma cargo.lock w repoto da prieme ot potrebitelq cargoHash 
                 cargoLock = rustCargoLock;
               } // extraArgs;
@@ -357,11 +376,14 @@
         };
         generatedFlake2 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
-          rev = "a68b08e";
+          # rev = "a68b08e";
           version = "v3.0.6";
           hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
+          # hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
+          # vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
           vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
+          # vendorHash = "sha256-RQwX1bN/uaCsJgaC4oyaNtJc8+xkQ02jmijFEsQgXGo=";
           option = 2; # options - 1 2 3
           extraArgs = {
             modRoot = "cmd/jwx";
@@ -433,13 +455,17 @@
         #go
         examplePackage3 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
-          rev = "a68b08e";
-          version = "v3.0.6";
-          hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
-          vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
+          # rev = "a68b08e";
+          version = "v3.0.7";
+          # hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
+          hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
+          # vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
+          vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
           option = 1; # options - 1 2 3
-          extraArgs = with pkgs;{ modRoot = "cmd/jwx";};
+          extraArgs = {
+            modRoot = "cmd/jwx";
+          };
         };
         examplePackage4 = generatePackage {
           url = "https://github.com/cfoust/cy";
@@ -448,6 +474,19 @@
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 1; # options - 1 2 3
+          extraArgs = with pkgs; { 
+            buildInputs = [ pkgs.xorg.libX11 ]; 
+            doCheck = false;
+            };
+        };
+
+        callPackage1 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          rev = "77ea96a";
+          version = "v1.5.1";
+          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
+          vendorHash = null;
+          option = 3; # options - 1 2 3
           extraArgs = with pkgs; { 
             buildInputs = [ pkgs.xorg.libX11 ]; 
             doCheck = false;
