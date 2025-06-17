@@ -17,9 +17,9 @@
           websiteSource = builtins.elemAt parts 2;
           owner = builtins.elemAt parts 3;
           repo = builtins.elemAt parts 4;
-        in { inherit websiteSource owner repo;};
+        in { inherit websiteSource owner repo; };
 
-      URLParser = { url, rev ? "", version ? "1.0.0", hash, option}:
+      URLParser = { url, rev ? "", version ? "1.0.0", hash, option }:
         let
           parsed = parseGitHubUrl url;
 
@@ -52,7 +52,7 @@
         in if websiteSource == "github.com" then {
           drv = fetchGitHub;
           srcString = ''
-            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitHub {
+            ${if option == 3 then "pkgs." else ""}fetchFromGitHub {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -62,7 +62,7 @@
         } else if websiteSource == "gitlab.com" then {
           drv = fetchGitLab;
           srcString = ''
-            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitLab {
+            ${if option == 3 then "pkgs." else ""}fetchFromGitLab {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -72,7 +72,7 @@
         } else if websiteSource == "chromium.googlesource.com" then {
           drv = fetchGitiles;
           srcString = ''
-            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitiles {
+            ${if option == 3 then "pkgs." else ""}fetchFromGitiles {
                 url = "${websiteSource}";
                 hash = "${hash}";
                 rev = "${rev}";
@@ -82,7 +82,7 @@
         } else if websiteSource == "crates.io" then {
           drv = fetchCrate;
           srcString = ''
-            ${if option == 3 then ''pkgs.'' else ""}.fetchCrate {
+            ${if option == 3 then "pkgs." else ""}.fetchCrate {
                 pname = "${repo}";
                 hash = "${hash}";
                 version = "${version}";
@@ -91,7 +91,7 @@
         } else if websiteSource == "codeberg.org" then {
           drv = fetchGitea;
           srcString = ''
-            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitea{
+            ${if option == 3 then "pkgs." else ""}fetchFromGitea{
                 domain = "${websiteSource}";
                 tag = "${version}";
                 owner = "${owner}";
@@ -99,16 +99,16 @@
                 hash = "${hash}";
               };
           '';
-        }
-         else
+        } else
           throw "Unsuported website";
 
       # Generate the package based on input parameters
       generatePackage = { url, rev ? "", version ? "1.0.0", option ? 1
         , hash ? lib.trace "Generate hash for input with nix build" ""
-        , vendorHash ? lib.trace "Generate vendorHash for input with nix build" ""
+        , vendorHash ?
+          lib.trace "Generate vendorHash for input with nix build" ""
         , extraArgs ? { } }:
-        let       
+        let
           urlParser = URLParser {
             url = url;
             rev = rev;
@@ -146,9 +146,12 @@
 
           extractDependencies = pkgs.writeText "extract-dependencies.py" ''
             import sys
+            import os
 
             # Read the requirements.txt file
             requirements_file = "${src}/requirements.txt"
+            if not os.path.exists(requirements_file):
+              sys.exit(0)
             try:
                 with open(requirements_file) as f:
                     lines = f.readlines()
@@ -174,163 +177,125 @@
           # Run the script to get dependencies
           commandedDependencies = pkgs.runCommand "get-dependencies" {
             inherit src;
-            buildInputs = [ pkgs.python3 pkgs.python3Packages.setuptools ];  # Ensure Python and setuptools are available
+            buildInputs = [
+              pkgs.python3
+              pkgs.python3Packages.setuptools
+            ]; # Ensure Python and setuptools are available
           } ''
-            ${pkgs.python3}/bin/python3 ${extractDependencies} > $out || echo "Failed to extract dependencies" > $out
+            ${pkgs.python3}/bin/python3 ${extractDependencies} > $out
           '';
 
           # Convert the dependencies into a Nix list
-          listedDependencies = (builtins.map (dep: pkgs.python3Packages.${dep}) (lib.splitString "\n" (builtins.readFile commandedDependencies)));
-          
-          packageDRVandSTR = 
-            if isPython then
-              if isPyProject then
-                {
-                  inherit src name version;
-                  drv = pkgs.python3Packages.buildPythonApplication (rec {
-                      pyproject = true;
-                      modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-                      buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-                      doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-                      dependencies = with pkgs.python3Packages; [
-                        setuptools
-                        ply
-                        pillow
-                      ];
-                    } // extraArgs);
+          listedDependencies = (builtins.map (dep: pkgs.python3Packages.${dep})
+            (lib.splitString "\n" (builtins.readFile commandedDependencies)));
 
-                  str = ''
-                    ${if option == 3 then ''pkgs.'' else ""}python3Packages.buildPythonApplication rec {
-                        name = "${name}";
-                        version = "${version}";
-                        src = ${srcString}
-
-                        pyproject = true;
-                        dependencies = with pkgs.python3Packages; [
-                          ${builtins.readFile commandedDependencies}
-                          setuptools
-                          ply
-                          pillow
-                        ];
-                        ${if builtins.hasAttr "modRoot" extraArgs then
-                          "modRoot = \"${extraArgs.modRoot}\";"
-                        else ""}
-                        ${if builtins.hasAttr "buildInputs" extraArgs then
-                          "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
-                        else ""} 
-                        ${if builtins.hasAttr "doCheck" extraArgs then
-                          if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                        else "" }
-                    }
-                  '';
-                }
+          extraArgsCombiSetter = ''
+            ${if builtins.hasAttr "modRoot" extraArgs then
+              ''modRoot = "${extraArgs.modRoot}";''
+            else
+              ""}
+            ${
+              if builtins.hasAttr "buildInputs" extraArgs then
+                "buildInputs = with pkgs; [ ${
+                  builtins.concatStringsSep " " extraArgs.buildInputs
+                } ];"
               else
-                {
-                  
-                  drv = pkgs.python3Packages.buildPythonApplication rec {
-                  inherit src name version;
-                  modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-                  doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
+                ""
+            } 
+            ${if builtins.hasAttr "doCheck" extraArgs then
+              if extraArgs.doCheck then
+                "doCheck = true;"
+              else
+                "doCheck = false;"
+            else
+              ""}
+          '';
+
+          packageDRVandSTR = if isPython then {
+            drv = pkgs.python3Packages.buildPythonApplication rec {
+              inherit src name version;
+              pyproject = isPyProject;
+
+              modRoot = extraArgs.modRoot or "";
+              buildInputs = extraArgs.buildInputs or [ ];
+              doCheck = extraArgs.doCheck or true;
+
+              dependencies = with pkgs.python3Packages; lib.debug.traceVal  [
+                (lib.splitString "\n" (builtins.readFile commandedDependencies))
+                setuptools
+                ply
+                pillow
+              ];
+            };
+
+            str = ''
+              ${
+                if option == 3 then "pkgs." else ""
+              }python3Packages.buildPythonApplication rec {
+                  name = "${name}";
+                  version = "${version}";
+                  src = ${srcString}
                   dependencies = with pkgs.python3Packages; [
+                    ${builtins.readFile commandedDependencies}
                     setuptools
                     ply
                     pillow
                   ];
-                  };
+                  ${extraArgsCombiSetter}               
+              }
+            '';
+          } else if isGo then {
+            drv = pkgs.buildGoModule rec {
+              inherit name version src vendorHash;
 
-                  str = ''
-                    ${if option == 3 then ''pkgs.'' else ""}python3Packages.buildPythonApplication rec {
-                        name = "${name}";
-                        version = "${version}";
-                        src = ${srcString}
-                        dependencies = with pkgs.python3Packages; [
-                          ${builtins.readFile commandedDependencies}
-                          setuptools
-                          ply
-                          pillow
-                        ];
-                        ${if builtins.hasAttr "modRoot" extraArgs then
-                          "modRoot = \"${extraArgs.modRoot}\";"
-                        else ""}
-                        ${if builtins.hasAttr "buildInputs" extraArgs then
-                          "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
-                        else ""} 
-                        ${if builtins.hasAttr "doCheck" extraArgs then
-                          if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                        else "" }                
-                    }
-                  '';
+              modRoot = extraArgs.modRoot or "";
+              buildInputs = extraArgs.buildInputs or [ ];
+              doCheck = extraArgs.doCheck or true;
+
+            } // extraArgs;
+
+            str = ''
+              ${if option == 3 then "pkgs." else ""}buildGoModule rec {
+                name = "${name}";
+                version = "${version}";
+                src = ${srcString}
+                ${
+                  if vendorHash == null then
+                    "vendorHash = null;"
+                  else
+                    ''vendorHash = "${vendorHash}";''
                 }
-            else if isGo then
-              {
-                drv = pkgs.buildGoModule rec {
-                # inherit src name version vendorHash;
-                inherit name version src vendorHash;
-
-                # modRoot = lib.debug.traceVal extraArgs.modRoot;
-
-                modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-                buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-                doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-
-                # modRoot = "cmd/jwx";
-                # modRoot = "";
-
-                } // extraArgs;
-
-                str =  ''
-                    pkgs.buildGoModule rec {
-                      name = "${name}";
-                      version = "${version}";
-                      src = ${srcString}
-                      ${if vendorHash == null then "vendorHash = null;" else "vendorHash = \"${vendorHash}\";" }
-                      ${if builtins.hasAttr "modRoot" extraArgs then
-                        "modRoot = \"${extraArgs.modRoot}\";"
-                      else ""}
-                      ${if builtins.hasAttr "buildInputs" extraArgs then
-                        "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
-                      else ""} 
-                      ${if builtins.hasAttr "doCheck" extraArgs then
-                        if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                      else "" }
-                    }
-                  '';
+                ${extraArgsCombiSetter} 
               }
-              
-            else if isRust then
-              {
-                drv = pkgs.rustPlatform.buildRustPackage rec {
-                  inherit src name version;
-                  modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-                  doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-                  # TODO ako nqma cargo.lock w repoto da prieme ot potrebitelq cargoHash 
-                  cargoLock = rustCargoLock;
-                } // extraArgs;
+            '';
+          }
 
-                str = ''
-                  pkgs.rustPlatform.buildRustPackage rec {
-                    name = "${name}";
-                    version = "${version}";
-                    src = ${srcString}
-                    
-                    cargoLock.lockFile = "''${src}/Cargo.lock";
-                    ${if builtins.hasAttr "modRoot" extraArgs then
-                      "modRoot = \"${extraArgs.modRoot}\";"
-                    else ""}
-                    ${if builtins.hasAttr "buildInputs" extraArgs then
-                      "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
-                    else ""} 
-                    ${if builtins.hasAttr "doCheck" extraArgs then
-                      if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                    else "" }              
-                    }
-                '';
-              }
-            else
-              throw
-              "Unknown language or missing necessary build files. Please check your source structure.";
+          else if isRust then {
+            drv = pkgs.rustPlatform.buildRustPackage rec {
+              inherit src name version;
+
+              modRoot = extraArgs.modRoot or "";
+              buildInputs = extraArgs.buildInputs or [ ];
+              doCheck = extraArgs.doCheck or true;
+
+              cargoLock = rustCargoLock;
+            } // extraArgs;
+
+            str = ''
+              ${
+                if option == 3 then "pkgs." else ""
+              }rustPlatform.buildRustPackage rec {
+                name = "${name}";
+                version = "${version}";
+                src = ${srcString}
+                
+                cargoLock.lockFile = "''${src}/Cargo.lock";
+                ${extraArgsCombiSetter}             
+                }
+            '';
+          } else
+            throw
+            "Unknown language or missing necessary build files. Please check your source structure.";
 
           # resolvePackage = name:
           #   let
@@ -348,56 +313,54 @@
           #       packageTail;
           #   in resolvedPackage;
 
-        in 
-        if option == 1 then
+        in if option == 1 then
         # Option 1: direct application build standard nix-2 packet
-          packageDRVandSTR.drv 
+          packageDRVandSTR.drv
 
         else if option == 2 then
         # Option 2: returns a flake with the package
-         generateFlake {inherit srcString packageDRVandSTR;}
+          generateFlake { inherit srcString packageDRVandSTR; }
         else if option == 3 then
-        # Defines package for callPackage {}
+        # Option 3: Defines package for callPackage {}
+        ''
+          { pkgs, lib }:
+          ${packageDRVandSTR.str}
+        ''
+        else if option == 4 then 
+        # Option 4: Defines nix-2 package 
+        ''
+          with import <nixpkgs> {};
+          ${packageDRVandSTR.str}
+        '' 
+        else throw "Invalid option. Please choose 1, 2, or 3.";
 
-          ''
-            { pkgs, lib }:
-            ${packageDRVandSTR.str}
+      generateFlake = { srcString, packageDRVandSTR }:
+        let
+          inherit (packageDRVandSTR.drv) name version src;
+          packageFlake = {
+            description = "A flake containing the created package";
 
-          ''
-        else if option == 4 then
-          ''
-            with import <nixpkgs> {};
-            ${packageDRVandSTR.str}
+            inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
-          ''
-        else
-          throw "Invalid option. Please choose 1, 2, or 3.";
-      
-      generateFlake = {srcString, packageDRVandSTR}:
-          let
-            inherit (packageDRVandSTR.drv) name version src;
-            packageFlake = {
-              description = "A flake containing the package";
+            outputs = { self, nixpkgs }:
+              let
+                system = "x86_64-linux";
+                pkgs = import nixpkgs { inherit system; };
+              in {
+                packages.${system}.default = {
+                  inherit name version;
+                  src = packageDRVandSTR.drv;
 
-              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-
-              outputs = { self, nixpkgs }:
-                let
-                  system = "x86_64-linux";
-                  pkgs = import nixpkgs { inherit system; };
-                in {
-                  packages.${system}.default = {
-                    inherit name version src;
-                    # meta = {
-                    #   description = package.meta.description;
-                    #   license = package.meta.license;
-                    # };
-                  };
+                  # meta = {
+                  #   description = package.meta.description;
+                  #   license = package.meta.license;
+                  # };
                 };
-            };
+              };
+          };
 
-            packageFlakeString = # nix #
-              ''
+          packageFlakeString = # nix #
+            ''
               {
                 description = "A flake containing the package";
                 inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
@@ -412,15 +375,15 @@
                     packages.''${system}.default = ${packageDRVandSTR.str};
                 }; 
               }                     
-              '';
-          in { inherit packageFlake packageFlakeString;};
+            '';
+        in { inherit packageFlake packageFlakeString; };
 
     in {
       inherit pkgs;
       # inherit resolvePackage;
       inherit (generateFlake) packageFlakeString;
 
-      legacyPackages.${system}= {
+      legacyPackages.${system} = {
         generatedFlake1 = generatePackage {
           url = "https://github.com/cfoust/cy";
           rev = "77ea96a";
@@ -428,10 +391,10 @@
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 2; # options - 1 2 3
-          extraArgs = { 
-            buildInputs = [ "xorg.libX11" ]; 
+          extraArgs = {
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
-            };
+          };
         };
         generatedFlake2 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
@@ -444,9 +407,7 @@
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           # vendorHash = "sha256-RQwX1bN/uaCsJgaC4oyaNtJc8+xkQ02jmijFEsQgXGo=";
           option = 2; # options - 1 2 3
-          extraArgs = {
-            modRoot = "cmd/jwx";
-          };
+          extraArgs = { modRoot = "cmd/jwx"; };
         };
         generatedFlake3 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
@@ -456,7 +417,7 @@
           option = 2; # options - 1 2 3
         };
         generatedFlake4 = generatePackage {
-         url = "https://github.com/evmar/n2";
+          url = "https://github.com/evmar/n2";
           # rev = "5295c19";
           # version = "0.7.6";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
@@ -469,10 +430,10 @@
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 3; # options - 1 2 3
-          extraArgs = with pkgs; { 
-            buildInputs = [ "xorg.libX11" ]; 
+          extraArgs = with pkgs; {
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
-            };
+          };
         };
         nixPackage1 = generatePackage {
           url = "https://github.com/cfoust/cy";
@@ -481,10 +442,10 @@
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 4; # options - 1 2 3
-          extraArgs = with pkgs; { 
-            buildInputs = [ "xorg.libX11" ]; 
+          extraArgs = with pkgs; {
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
-            };
+          };
         };
         nixPackage2 = generatePackage {
           url = "https://github.com/LoLei/razer-cli";
@@ -499,7 +460,7 @@
           # rev = "77ea96a";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
-          option = 3; # options - 1 2 3
+          option = 4; # options - 1 2 3
           extraArgs = with pkgs; { };
         };
       };
@@ -527,9 +488,23 @@
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
           option = 1; # options - 1 2 3
         };
+        examplePackage2 = generatePackage {
+          url = "https://github.com/OpenTTD/nml";
+          # rev = "5295c19";
+          version = "0.7.6";
+          hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
+          option = 1; # options - 1 2 3
+        };
+        examplePackage3 = generatePackage {
+          url = "https://github.com/OpenTTD/nml";
+          # rev = "5295c19";
+          version = "0.7.6";
+          hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
+          option = 1; # options - 1 2 3
+        };
 
         #rust
-        examplePackage2 = generatePackage {
+        examplePackage4 = generatePackage {
           url = "https://github.com/evmar/n2";
           # rev = "5295c19";
           # version = "0.7.6";
@@ -552,7 +527,7 @@
         };
 
         #go
-        examplePackage3 = generatePackage {
+        examplePackage7 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
           # rev = "a68b08e";
           version = "v3.0.7";
@@ -562,24 +537,20 @@
           # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
           option = 1; # options - 1 2 3
-          extraArgs = {
-            modRoot = "cmd/jwx";
-          };
+          extraArgs = { modRoot = "cmd/jwx"; };
         };
-        examplePackage4 = generatePackage {
+        examplePackage8 = generatePackage {
           url = "https://github.com/cfoust/cy";
           rev = "77ea96a";
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
           option = 1; # options - 1 2 3
-          extraArgs = with pkgs; { 
-            buildInputs = [ pkgs.xorg.libX11 ]; 
+          extraArgs = with pkgs; {
+            buildInputs = [ pkgs.xorg.libX11 ];
             doCheck = false;
-            };
+          };
         };
-
-        
 
       };
 
