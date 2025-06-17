@@ -17,13 +17,9 @@
           websiteSource = builtins.elemAt parts 2;
           owner = builtins.elemAt parts 3;
           repo = builtins.elemAt parts 4;
-        in {
-          websiteSource = websiteSource;
-          owner = owner;
-          repo = repo;
-        };
+        in { inherit websiteSource owner repo;};
 
-      URLParser = { url, rev ? "", version ? "1.0.0", hash, }:
+      URLParser = { url, rev ? "", version ? "1.0.0", hash, option}:
         let
           parsed = parseGitHubUrl url;
 
@@ -46,10 +42,17 @@
             pname = repo;
             inherit hash version;
           };
+
+          fetchGitea = pkgs.fetchFromGitea {
+            domain = "codeberg.org";
+            tag = version;
+            inherit owner repo hash;
+          };
+
         in if websiteSource == "github.com" then {
           drv = fetchGitHub;
           srcString = ''
-            pkgs.fetchFromGitHub {
+            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitHub {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -59,7 +62,7 @@
         } else if websiteSource == "gitlab.com" then {
           drv = fetchGitLab;
           srcString = ''
-            pkgs.fetchFromGitLab {
+            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitLab {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -69,8 +72,8 @@
         } else if websiteSource == "chromium.googlesource.com" then {
           drv = fetchGitiles;
           srcString = ''
-            pkgs.fetchFromGitiles {
-                url = "${url}";
+            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitiles {
+                url = "${websiteSource}";
                 hash = "${hash}";
                 rev = "${rev}";
                 version = "${version}";
@@ -79,13 +82,25 @@
         } else if websiteSource == "crates.io" then {
           drv = fetchCrate;
           srcString = ''
-            pkgs.fetchCrate {
+            ${if option == 3 then ''pkgs.'' else ""}.fetchCrate {
                 pname = "${repo}";
                 hash = "${hash}";
                 version = "${version}";
               };
           '';
-        } else
+        } else if websiteSource == "codeberg.org" then {
+          drv = fetchGitea;
+          srcString = ''
+            ${if option == 3 then ''pkgs.'' else ""}fetchFromGitea{
+                domain = "${websiteSource}";
+                tag = "${version}";
+                owner = "${owner}";
+                repo = "${repo}";
+                hash = "${hash}";
+              };
+          '';
+        }
+         else
           throw "Unsuported website";
 
       # Generate the package based on input parameters
@@ -99,6 +114,7 @@
             rev = rev;
             version = version;
             hash = hash;
+            option = option;
           };
 
           src = urlParser.drv;
@@ -128,13 +144,50 @@
           else
             null;
 
+          extractDependencies = pkgs.writeText "extract-dependencies.py" ''
+            import sys
+
+            # Read the requirements.txt file
+            requirements_file = "${src}/requirements.txt"
+            try:
+                with open(requirements_file) as f:
+                    lines = f.readlines()
+                    # Filter out comments and empty lines, and extract package names
+                    install_requires = []
+                    for line in lines:
+                        stripped_line = line.strip()
+                        if stripped_line and not stripped_line.startswith('#'):
+                            # Split at '==' and take the first part (package name)
+                            package_name = stripped_line.split('==')[0].strip()
+                            install_requires.append(package_name)
+            except Exception as e:
+                print(f"Error reading {requirements_file}: {e}")
+                sys.exit(1)
+
+            # Print the dependencies
+            if install_requires:
+                print("\n".join(install_requires))
+            else:
+                print("No dependencies found.")
+          '';
+
+          # Run the script to get dependencies
+          commandedDependencies = pkgs.runCommand "get-dependencies" {
+            inherit src;
+            buildInputs = [ pkgs.python3 pkgs.python3Packages.setuptools ];  # Ensure Python and setuptools are available
+          } ''
+            ${pkgs.python3}/bin/python3 ${extractDependencies} > $out || echo "Failed to extract dependencies" > $out
+          '';
+
+          # Convert the dependencies into a Nix list
+          listedDependencies = (builtins.map (dep: pkgs.python3Packages.${dep}) (lib.splitString "\n" (builtins.readFile commandedDependencies)));
           
           packageDRVandSTR = 
             if isPython then
               if isPyProject then
                 {
+                  inherit src name version;
                   drv = pkgs.python3Packages.buildPythonApplication (rec {
-                      inherit src name version;
                       pyproject = true;
                       modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
                       buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
@@ -147,13 +200,14 @@
                     } // extraArgs);
 
                   str = ''
-                    pkgs.python3Packages.buildPythonApplication rec {
+                    ${if option == 3 then ''pkgs.'' else ""}python3Packages.buildPythonApplication rec {
                         name = "${name}";
                         version = "${version}";
                         src = ${srcString}
 
                         pyproject = true;
                         dependencies = with pkgs.python3Packages; [
+                          ${builtins.readFile commandedDependencies}
                           setuptools
                           ply
                           pillow
@@ -167,33 +221,70 @@
                         ${if builtins.hasAttr "doCheck" extraArgs then
                           if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
                         else "" }
-                    };
+                    }
                   '';
                 }
               else
+                {
+                  
+                  drv = pkgs.python3Packages.buildPythonApplication rec {
+                  inherit src name version;
+                  modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+                  doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
+                  dependencies = with pkgs.python3Packages; [
+                    setuptools
+                    ply
+                    pillow
+                  ];
+                  };
+
+                  str = ''
+                    ${if option == 3 then ''pkgs.'' else ""}python3Packages.buildPythonApplication rec {
+                        name = "${name}";
+                        version = "${version}";
+                        src = ${srcString}
+                        dependencies = with pkgs.python3Packages; [
+                          ${builtins.readFile commandedDependencies}
+                          setuptools
+                          ply
+                          pillow
+                        ];
+                        ${if builtins.hasAttr "modRoot" extraArgs then
+                          "modRoot = \"${extraArgs.modRoot}\";"
+                        else ""}
+                        ${if builtins.hasAttr "buildInputs" extraArgs then
+                          "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
+                        else ""} 
+                        ${if builtins.hasAttr "doCheck" extraArgs then
+                          if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
+                        else "" }                
+                    }
+                  '';
+                }
+            else if isGo then
               {
-                drv = pkgs.python3Packages.buildPythonApplication rec {
-                inherit src name version;
+                drv = pkgs.buildGoModule rec {
+                # inherit src name version vendorHash;
+                inherit name version src vendorHash;
+
+                # modRoot = lib.debug.traceVal extraArgs.modRoot;
+
                 modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
                 buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
                 doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-                dependencies = with pkgs.python3Packages; [
-                  setuptools
-                  ply
-                  pillow
-                ];
-                };
 
-                str = ''
-                  pkgs.python3Packages.buildPythonApplication rec {
+                # modRoot = "cmd/jwx";
+                # modRoot = "";
+
+                } // extraArgs;
+
+                str =  ''
+                    pkgs.buildGoModule rec {
                       name = "${name}";
                       version = "${version}";
                       src = ${srcString}
-                      dependencies = with pkgs.python3Packages; [
-                        setuptools
-                        ply
-                        pillow
-                      ];
+                      ${if vendorHash == null then "vendorHash = null;" else "vendorHash = \"${vendorHash}\";" }
                       ${if builtins.hasAttr "modRoot" extraArgs then
                         "modRoot = \"${extraArgs.modRoot}\";"
                       else ""}
@@ -202,33 +293,29 @@
                       else ""} 
                       ${if builtins.hasAttr "doCheck" extraArgs then
                         if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                      else "" }                
-                  };
-                '';
+                      else "" }
+                    }
+                  '';
               }
-          else if isGo then
-            {
-              drv = pkgs.buildGoModule rec {
-              # inherit src name version vendorHash;
-              inherit name version src vendorHash;
+              
+            else if isRust then
+              {
+                drv = pkgs.rustPlatform.buildRustPackage rec {
+                  inherit src name version;
+                  modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
+                  buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
+                  doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
+                  # TODO ako nqma cargo.lock w repoto da prieme ot potrebitelq cargoHash 
+                  cargoLock = rustCargoLock;
+                } // extraArgs;
 
-              # modRoot = lib.debug.traceVal extraArgs.modRoot;
-
-              modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-              buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-              doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-
-              # modRoot = "cmd/jwx";
-              # modRoot = "";
-
-              } // extraArgs;
-
-              str =  ''
-                  pkgs.buildGoModule rec {
+                str = ''
+                  pkgs.rustPlatform.buildRustPackage rec {
                     name = "${name}";
                     version = "${version}";
                     src = ${srcString}
-                    ${if vendorHash == null then "vendorHash = null;" else "vendorHash = \"${vendorHash}\";" }
+                    
+                    cargoLock.lockFile = "''${src}/Cargo.lock";
                     ${if builtins.hasAttr "modRoot" extraArgs then
                       "modRoot = \"${extraArgs.modRoot}\";"
                     else ""}
@@ -237,44 +324,13 @@
                     else ""} 
                     ${if builtins.hasAttr "doCheck" extraArgs then
                       if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                    else "" }
-                  };
+                    else "" }              
+                    }
                 '';
-            }
-            
-          else if isRust then
-            {
-              drv = pkgs.rustPlatform.buildRustPackage rec {
-                inherit src name version;
-                modRoot = if builtins.hasAttr "modRoot" extraArgs then extraArgs.modRoot else "";
-                buildInputs = if builtins.hasAttr "buildInputs" extraArgs then extraArgs.buildInputs else [];
-                doCheck = if builtins.hasAttr "doCheck" extraArgs then extraArgs.doCheck else true;
-                # TODO ako nqma cargo.lock w repoto da prieme ot potrebitelq cargoHash 
-                cargoLock = rustCargoLock;
-              } // extraArgs;
-
-              str = ''
-                pkgs.rustPlatform.buildRustPackage rec {
-                  name = "${name}";
-                  version = "${version}";
-                  src = ${srcString}
-                  
-                  cargoLock.lockFile = "''${src}/Cargo.lock";
-                  ${if builtins.hasAttr "modRoot" extraArgs then
-                    "modRoot = \"${extraArgs.modRoot}\";"
-                  else ""}
-                  ${if builtins.hasAttr "buildInputs" extraArgs then
-                    "buildInputs = with pkgs; [ ${builtins.concatStringsSep " " extraArgs.buildInputs} ];"
-                  else ""} 
-                  ${if builtins.hasAttr "doCheck" extraArgs then
-                    if extraArgs.doCheck then "doCheck = true;" else "doCheck = false;"
-                  else "" }              
-                  }; 
-              '';
-            }
-          else
-            throw
-            "Unknown language or missing necessary build files. Please check your source structure.";
+              }
+            else
+              throw
+              "Unknown language or missing necessary build files. Please check your source structure.";
 
           # resolvePackage = name:
           #   let
@@ -302,15 +358,18 @@
          generateFlake {inherit srcString packageDRVandSTR;}
         else if option == 3 then
         # Defines package for callPackage {}
-          ''
 
+          ''
+            { pkgs, lib }:
+            ${packageDRVandSTR.str}
+
+          ''
+        else if option == 4 then
+          ''
             with import <nixpkgs> {};
             ${packageDRVandSTR.str}
 
           ''
-
-        # трябва файл с { pkgs }: + packageDRVandSTR.str  но с extraArgs може да има проблем те ще се евал до път до деривация
-
         else
           throw "Invalid option. Please choose 1, 2, or 3.";
       
@@ -350,7 +409,7 @@
                     pkgs = import nixpkgs { inherit system; };
                   in
                   {
-                    packages.''${system}.default = ${packageDRVandSTR.str}
+                    packages.''${system}.default = ${packageDRVandSTR.str};
                 }; 
               }                     
               '';
@@ -402,6 +461,46 @@
           # version = "0.7.6";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
           option = 2; # options - 1 2 3
+        };
+        callPackage1 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          rev = "77ea96a";
+          version = "v1.5.1";
+          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
+          vendorHash = null;
+          option = 3; # options - 1 2 3
+          extraArgs = with pkgs; { 
+            buildInputs = [ "xorg.libX11" ]; 
+            doCheck = false;
+            };
+        };
+        nixPackage1 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          rev = "77ea96a";
+          version = "v1.5.1";
+          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
+          vendorHash = null;
+          option = 4; # options - 1 2 3
+          extraArgs = with pkgs; { 
+            buildInputs = [ "xorg.libX11" ]; 
+            doCheck = false;
+            };
+        };
+        nixPackage2 = generatePackage {
+          url = "https://github.com/LoLei/razer-cli";
+          # rev = "77ea96a";
+          version = "2.3.0";
+          hash = "sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=";
+          option = 4; # options - 1 2 3
+          extraArgs = with pkgs; { };
+        };
+        nixPackage3 = generatePackage {
+          url = "https://codeberg.org/svartstare/pass2csv/";
+          # rev = "77ea96a";
+          version = "v1.2.0";
+          hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
+          option = 3; # options - 1 2 3
+          extraArgs = with pkgs; { };
         };
       };
 
@@ -480,18 +579,7 @@
             };
         };
 
-        callPackage1 = generatePackage {
-          url = "https://github.com/cfoust/cy";
-          rev = "77ea96a";
-          version = "v1.5.1";
-          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
-          vendorHash = null;
-          option = 3; # options - 1 2 3
-          extraArgs = with pkgs; { 
-            buildInputs = [ pkgs.xorg.libX11 ]; 
-            doCheck = false;
-            };
-        };
+        
 
       };
 
