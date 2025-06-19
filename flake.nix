@@ -123,14 +123,6 @@
           repo = (parseGitHubUrl url).repo;
           name = "${repo}-automated-package";
 
-          # package = {
-          #   inherit name version src;
-          #   meta = {
-          #     description = "An automatic package";
-          #     license = "MIT";
-          #   };
-          # };
-
           # Detect the language based on common files
           isPython = builtins.pathExists "${src}/setup.py";
           isPyProject = builtins.pathExists "${src}/pyproject.toml";
@@ -180,7 +172,7 @@
             buildInputs = [
               pkgs.python3
               pkgs.python3Packages.setuptools
-            ]; # Ensure Python and setuptools are available
+            ];
           } ''
             ${pkgs.python3}/bin/python3 ${extractDependencies} > $out
           '';
@@ -189,24 +181,29 @@
           listedDependencies = (builtins.map (dep: pkgs.python3Packages.${dep})
             (lib.splitString "\n" (builtins.readFile commandedDependencies)));
 
+          # Collective attr setting to reduce redundency
           extraArgsCombiSetter = ''
             ${if builtins.hasAttr "modRoot" extraArgs then
-              ''modRoot = "${extraArgs.modRoot}";''
+              if builtins.isString extraArgs.modRoot then ''modRoot = "${extraArgs.modRoot}";'' else throw "modRoot has to be string"
             else
               ""}
             ${
               if builtins.hasAttr "buildInputs" extraArgs then
                 "buildInputs = with pkgs; [ ${
-                  builtins.concatStringsSep " " extraArgs.buildInputs
+                  if (builtins.all (input: builtins.isString input)) extraArgs.buildInputs then 
+                    builtins.concatStringsSep " " extraArgs.buildInputs 
+                  else throw " Add the package name surrounded with \"\" "
                 } ];"
               else
                 ""
             } 
             ${if builtins.hasAttr "doCheck" extraArgs then
-              if extraArgs.doCheck then
-                "doCheck = true;"
-              else
-                "doCheck = false;"
+              if builtins.isBoolean extraArgs.doCheck then 
+                if extraArgs.doCheck then
+                  "doCheck = true;"
+                else
+                  "doCheck = false;"
+              else throw "doCheck has to be Boolean"
             else
               ""}
           '';
@@ -241,6 +238,7 @@
                     ply
                     pillow
                   ];
+                  pyproject = ${isPyProject};
                   ${extraArgsCombiSetter}               
               }
             '';
@@ -249,10 +247,10 @@
               inherit name version src vendorHash;
 
               modRoot = extraArgs.modRoot or "";
-              buildInputs = extraArgs.buildInputs or [ ];
+              buildInputs = lib.debug.traceVal extraArgs.buildInputs or [ ];
               doCheck = extraArgs.doCheck or true;
 
-            } // extraArgs;
+            };
 
             str = ''
               ${if option == 3 then "pkgs." else ""}buildGoModule rec {
@@ -279,7 +277,7 @@
               doCheck = extraArgs.doCheck or true;
 
               cargoLock = rustCargoLock;
-            } // extraArgs;
+            };
 
             str = ''
               ${
@@ -379,9 +377,6 @@
         in { inherit packageFlake packageFlakeString; };
 
     in {
-      inherit pkgs;
-      # inherit resolvePackage;
-      inherit (generateFlake) packageFlakeString;
 
       legacyPackages.${system} = {
         generatedFlake1 = generatePackage {
@@ -398,30 +393,22 @@
         };
         generatedFlake2 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
-          # rev = "a68b08e";
           version = "v3.0.6";
           hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
-          # hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
-          # vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
           vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
-          # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
-          # vendorHash = "sha256-RQwX1bN/uaCsJgaC4oyaNtJc8+xkQ02jmijFEsQgXGo=";
-          option = 2; # options - 1 2 3
+          option = 2; # options - 1 2 3 4
           extraArgs = { modRoot = "cmd/jwx"; };
         };
         generatedFlake3 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
-          # rev = "5295c19";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          option = 2; # options - 1 2 3
+          option = 2; # options - 1 2 3 4
         };
         generatedFlake4 = generatePackage {
           url = "https://github.com/evmar/n2";
-          # rev = "5295c19";
-          # version = "0.7.6";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
-          option = 2; # options - 1 2 3
+          option = 2; # options - 1 2 3 4
         };
         callPackage1 = generatePackage {
           url = "https://github.com/cfoust/cy";
@@ -429,7 +416,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 3; # options - 1 2 3
+          option = 3; # options - 1 2 3 4
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -441,7 +428,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 4; # options - 1 2 3
+          option = 4; # options - 1 2 3 4
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -449,15 +436,13 @@
         };
         nixPackage2 = generatePackage {
           url = "https://github.com/LoLei/razer-cli";
-          # rev = "77ea96a";
           version = "2.3.0";
           hash = "sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=";
-          option = 4; # options - 1 2 3
+          option = 4; # options - 1 2 3 4
           extraArgs = with pkgs; { };
         };
         nixPackage3 = generatePackage {
           url = "https://codeberg.org/svartstare/pass2csv/";
-          # rev = "77ea96a";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
           option = 4; # options - 1 2 3
@@ -465,39 +450,22 @@
         };
       };
 
-      templates.rust = {
-        path = ./rust;
-        description = "A simple Rust/Cargo project";
-        welcomeText = ''
-          # Simple Rust/Cargo Template
-          ## Intended usage
-          The intended usage of this flake is to create a new Rust project.
-
-          ## More info
-          - [Rust language](https://www.rust-lang.org/)
-          - [Rust on the NixOS Wiki](https://wiki.nixos.org/wiki/Rust)
-        '';
-      };
-
       packages.${system} = {
         #python
         examplePackage1 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
-          # rev = "5295c19";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
           option = 1; # options - 1 2 3
         };
         examplePackage2 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
-          # rev = "5295c19";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
           option = 1; # options - 1 2 3
         };
         examplePackage3 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
-          # rev = "5295c19";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
           option = 1; # options - 1 2 3
@@ -506,21 +474,17 @@
         #rust
         examplePackage4 = generatePackage {
           url = "https://github.com/evmar/n2";
-          # rev = "5295c19";
-          # version = "0.7.6";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
           option = 1; # options - 1 2 3
         };
         examplePackage5 = generatePackage {
           url = "https://gitlab.com/kornelski/mandown";
           rev = "9da94876";
-          # version = "v1.1.0";
           hash = "sha256-wEv7h3Kl4EczmsY4FuGOvRgeGf0rgANhONhCKyu6zik=";
           option = 1; # options - 1 2 3
         };
         examplePackage6 = generatePackage {
           url = "https://crates.io/crates/petname";
-          # rev = "9da94876";
           version = "3.0.0-alpha.2";
           hash = "sha256-6gJkaHAhau2HKKwVa/FL1mZfC9IJkyORm5P8MzLnQ5Q=";
           option = 1; # options - 1 2 3
@@ -529,12 +493,8 @@
         #go
         examplePackage7 = generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
-          # rev = "a68b08e";
           version = "v3.0.7";
-          # hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
           hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
-          # vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
-          # vendorHash = "sha256-JXH8wqf3CuqOB2t+tcM8pY7nS4LTpGWdgnJdaYYkXwU=";
           vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
           option = 1; # options - 1 2 3
           extraArgs = { modRoot = "cmd/jwx"; };
@@ -547,7 +507,7 @@
           vendorHash = null;
           option = 1; # options - 1 2 3
           extraArgs = with pkgs; {
-            buildInputs = [ pkgs.xorg.libX11 ];
+            buildInputs = [ xorg.libX11 ];
             doCheck = false;
           };
         };
