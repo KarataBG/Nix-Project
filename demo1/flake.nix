@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-    automatorFlake.url = "path:../";  # Adjust the path as necessary
+    automatorFlake.url = "path:../";
   };
 
   outputs = { self, automatorFlake, nixpkgs, ... }:
@@ -31,7 +31,9 @@
 
     in
     {
-      legacyPackages.${system} = {       
+      legacyPackages.${system} = {
+        textFile = autoPackage;
+        textFile1 = autoPackage1;
         packagesFile = pkgs.writeTextFile {
           name = "flake-nix";
           destination = "/flake.nix";
@@ -39,7 +41,7 @@
         };
         packagesFile1 = pkgs.writeTextFile {
           name = "flake-nix";
-          destination = "/flake.nix";
+          destination = "/automatic/flake.nix";
           text = autoPackage1;
         };
       };
