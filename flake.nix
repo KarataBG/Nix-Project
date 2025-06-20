@@ -52,7 +52,7 @@
         in if websiteSource == "github.com" then {
           drv = fetchGitHub;
           srcString = ''
-            ${if option == 3 then "pkgs." else ""}fetchFromGitHub {
+            ${if option == 4 then "" else "pkgs."}fetchFromGitHub {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -62,7 +62,7 @@
         } else if websiteSource == "gitlab.com" then {
           drv = fetchGitLab;
           srcString = ''
-            ${if option == 3 then "pkgs." else ""}fetchFromGitLab {
+            ${if option == 4 then "" else "pkgs."}fetchFromGitLab {
                 repo = "${repo}";
                 owner = "${owner}";
                 tag = "${version}";
@@ -72,7 +72,7 @@
         } else if websiteSource == "chromium.googlesource.com" then {
           drv = fetchGitiles;
           srcString = ''
-            ${if option == 3 then "pkgs." else ""}fetchFromGitiles {
+            ${if option == 4 then "" else "pkgs."}fetchFromGitiles {
                 url = "${websiteSource}";
                 hash = "${hash}";
                 rev = "${rev}";
@@ -82,7 +82,7 @@
         } else if websiteSource == "crates.io" then {
           drv = fetchCrate;
           srcString = ''
-            ${if option == 3 then "pkgs." else ""}.fetchCrate {
+            ${if option == 4 then "" else "pkgs."}.fetchCrate {
                 pname = "${repo}";
                 hash = "${hash}";
                 version = "${version}";
@@ -91,7 +91,7 @@
         } else if websiteSource == "codeberg.org" then {
           drv = fetchGitea;
           srcString = ''
-            ${if option == 3 then "pkgs." else ""}fetchFromGitea{
+            ${if option == 4 then "" else "pkgs."}fetchFromGitea{
                 domain = "${websiteSource}";
                 tag = "${version}";
                 owner = "${owner}";
@@ -198,7 +198,7 @@
                 ""
             } 
             ${if builtins.hasAttr "doCheck" extraArgs then
-              if builtins.isBoolean extraArgs.doCheck then 
+              if builtins.isBool extraArgs.doCheck then 
                 if extraArgs.doCheck then
                   "doCheck = true;"
                 else
@@ -226,9 +226,7 @@
             };
 
             str = ''
-              ${
-                if option == 3 then "pkgs." else ""
-              }python3Packages.buildPythonApplication rec {
+              ${if option == 4 then "" else "pkgs."}python3Packages.buildPythonApplication rec {
                   name = "${name}";
                   version = "${version}";
                   src = ${srcString}
@@ -257,7 +255,7 @@
             };
 
             str = ''
-              ${if option == 3 then "pkgs." else ""}buildGoModule rec {
+              ${if option == 4 then "" else "pkgs."}buildGoModule rec {
                 name = "${name}";
                 version = "${version}";
                 src = ${srcString}
@@ -284,9 +282,7 @@
             };
 
             str = ''
-              ${
-                if option == 3 then "pkgs." else ""
-              }rustPlatform.buildRustPackage rec {
+              ${if option == 4 then "" else "pkgs."}rustPlatform.buildRustPackage rec {
                 name = "${name}";
                 version = "${version}";
                 src = ${srcString}
@@ -337,31 +333,7 @@
         else throw "Invalid option. Please choose 1, 2, or 3.";
 
       generateFlake = { srcString, packageDRVandSTR }:
-        let
-          inherit (packageDRVandSTR.drv) name version src;
-          packageFlake = {
-            description = "A flake containing the created package";
-
-            inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-
-            outputs = { self, nixpkgs }:
-              let
-                system = "x86_64-linux";
-                pkgs = import nixpkgs { inherit system; };
-              in {
-                packages.${system}.default = {
-                  inherit name version;
-                  src = packageDRVandSTR.drv;
-
-                  # meta = {
-                  #   description = package.meta.description;
-                  #   license = package.meta.license;
-                  # };
-                };
-              };
-          };
-
-          packageFlakeString = # nix #
+        
             ''
               {
                 description = "A flake containing the package";
@@ -378,7 +350,6 @@
                 }; 
               }                     
             '';
-        in { inherit packageFlake packageFlakeString; };
 
     in {
 
@@ -488,10 +459,22 @@
           vendorHash = null;
           option = 4; # options - 1 2 3 4
           extraArgs = with pkgs; {
-            buildInputs = [ xorg.libX11 ];
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
           };
         };
+        packageGenerator = {
+          url,
+          rev ? "",
+          version ? "1.0.0",
+          option ? 1,
+          hash ? lib.trace "Generate hash for input with nix build" "",
+          vendorHash ? lib.trace "Generate vendorHash for input with nix build" "",
+          extraArgs ? {}
+        }: 
+          generatePackage {
+            inherit url rev version option hash vendorHash extraArgs;
+          };
       };
 
       packages.${system} = {
