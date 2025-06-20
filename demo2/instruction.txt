@@ -1,0 +1,3 @@
+nix eval ../#legacyPackages.x86_64-linux.{name of package} --raw > flake.nix
+nix build
+nix flake show

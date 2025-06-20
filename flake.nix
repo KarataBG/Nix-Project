@@ -166,7 +166,7 @@
                 print("No dependencies found.")
           '';
 
-          # Run the script to get dependencies
+          # Run the above script to get dependencies
           commandedDependencies = pkgs.runCommand "get-dependencies" {
             inherit src;
             buildInputs = [
@@ -177,11 +177,26 @@
             ${pkgs.python3}/bin/python3 ${extractDependencies} > $out
           '';
 
-          # Convert the dependencies into a Nix list
-          listedDependencies = (builtins.map (dep: pkgs.python3Packages.${dep})
-            (lib.splitString "\n" (builtins.readFile commandedDependencies)));
+          #Specific python package resolving
+          resolveDeps = dep: pkgs.python3Packages.${dep};
+          removeEmpties = list: builtins.filter (x: x != "") list;
+          splitFile = lib.splitString "\n" (builtins.readFile commandedDependencies);
 
-          # Collective attr setting to reduce redundency
+          #Generic package resolving
+          resolvePackage = pkg: 
+              let
+                parts = lib.splitString "." pkg;
+                resolved = if checkForPath pkg then builtins.foldl' (acc: part: acc.${part}) pkgs parts  # Adding the namespaces one by one
+                  else throw "  Add the package name surrounded with \"\" ";
+              in
+                resolved;
+
+          checkForPath = pkg:
+            builtins.isString pkg;
+
+          resolveBuildInputs = list: builtins.map resolvePackage list;
+          resolvedInputs = resolveBuildInputs (extraArgs.buildInputs or []);
+
           extraArgsCombiSetter = ''
             ${if builtins.hasAttr "modRoot" extraArgs then
               if builtins.isString extraArgs.modRoot then ''modRoot = "${extraArgs.modRoot}";'' else throw "modRoot has to be string"
@@ -190,7 +205,7 @@
             ${
               if builtins.hasAttr "buildInputs" extraArgs then
                 "buildInputs = with pkgs; [ ${
-                  if (builtins.all (input: builtins.isString input)) extraArgs.buildInputs then 
+                  if (builtins.any (input: builtins.isString input)) extraArgs.buildInputs then 
                     builtins.concatStringsSep " " extraArgs.buildInputs 
                   else throw " Add the package name surrounded with \"\" "
                 } ];"
@@ -214,11 +229,11 @@
               pyproject = isPyProject;
 
               modRoot = extraArgs.modRoot or "";
-              buildInputs = extraArgs.buildInputs or [ ];
+              buildInputs = resolvedInputs;
               doCheck = extraArgs.doCheck or true;
 
-              dependencies = with pkgs.python3Packages; lib.debug.traceVal  [
-                (lib.splitString "\n" (builtins.readFile commandedDependencies))
+              dependencies = with pkgs.python3Packages;  [
+                (builtins.concatStringsSep " " (builtins.map (resolveDeps) (removeEmpties (splitFile))))
                 setuptools
                 ply
                 pillow
@@ -231,7 +246,7 @@
                   version = "${version}";
                   src = ${srcString}
                   dependencies = with pkgs.python3Packages; [
-                    ${builtins.readFile commandedDependencies}
+                    ${(builtins.concatStringsSep " " (removeEmpties (splitFile)))}
                     setuptools
                     ply
                     pillow
@@ -249,7 +264,7 @@
               inherit name version src vendorHash;
 
               modRoot = extraArgs.modRoot or "";
-              buildInputs = lib.debug.traceVal extraArgs.buildInputs or [ ];
+              buildInputs = resolvedInputs;
               doCheck = extraArgs.doCheck or true;
 
             };
@@ -275,7 +290,7 @@
               inherit src name version;
 
               modRoot = extraArgs.modRoot or "";
-              buildInputs = extraArgs.buildInputs or [ ];
+              buildInputs = resolvedInputs;
               doCheck = extraArgs.doCheck or true;
 
               cargoLock = rustCargoLock;
@@ -548,6 +563,10 @@
         examplePackage4 = generatePackage {
           url = "https://github.com/evmar/n2";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
+          rev = "d67d508c389ac2e6961c6f84cd668f05ec7dc7b7";
+          extraArgs = {
+            doCheck = false;
+          };
           option = 1; # options - 1 2 3 4
         };
         examplePackage5 = generatePackage {
