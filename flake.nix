@@ -320,10 +320,7 @@
           generateFlake { inherit srcString packageDRVandSTR; }
         else if option == 3 then
         # Option 3: Defines package for callPackage {}
-        ''
-          { pkgs, lib }:
-          ${packageDRVandSTR.str}
-        ''
+          generateCallPackage {inherit packageDRVandSTR;}
         else if option == 4 then 
         # Option 4: Defines nix-2 package 
         ''
@@ -332,8 +329,43 @@
         '' 
         else throw "Invalid option. Please choose 1, 2, or 3.";
 
+      generateCallPackage = {packageDRVandSTR}: 
+        let
+          packageCall = { pkgs, lib }: "${packageDRVandSTR.drv}";
+          packageCallString = ''
+            { pkgs, lib }:
+            ${packageDRVandSTR.str}
+          '';
+        in { inherit packageCall packageCallString;};
+
+
+
       generateFlake = { srcString, packageDRVandSTR }:
-        
+        let
+          inherit (packageDRVandSTR.drv) name version src;
+          packageFlake = {
+            description = "A flake containing the created package";
+
+            inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+
+            outputs = { self, nixpkgs }:
+              let
+                system = "x86_64-linux";
+                pkgs = import nixpkgs { inherit system; };
+              in {
+                packages.${system}.default = {
+                  inherit name version;
+                  src = packageDRVandSTR.drv;
+
+                  # meta = {
+                  #   description = package.meta.description;
+                  #   license = package.meta.license;
+                  # };
+                };
+              };
+          };
+
+          packageFlakeString = # nix #
             ''
               {
                 description = "A flake containing the package";
@@ -350,6 +382,7 @@
                 }; 
               }                     
             '';
+        in { inherit packageFlake packageFlakeString; };
 
     in {
 
@@ -394,6 +427,18 @@
           option = 3; # options - 1 2 3 4
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
+            doCheck = false;
+          };
+        };
+        callPackage2 = generatePackage {
+          url = "https://github.com/cfoust/cy";
+          rev = "77ea96a";
+          version = "v1.5.1";
+          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
+          vendorHash = null;
+          option = 3; # options - 1 2 3 4
+          extraArgs = with pkgs; {
+            buildInputs = [ xorg.libX11 ];
             doCheck = false;
           };
         };

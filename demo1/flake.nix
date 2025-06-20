@@ -29,21 +29,53 @@
           };
         };
 
+      autoPackage3 = automatorFlake.legacyPackages.${system}.packageGenerator {
+        url = "https://github.com/OpenTTD/nml";
+        version = "0.7.6";
+        hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
+        option = 1;
+      };
+      autoPackage4 = automatorFlake.legacyPackages.${system}.packageGenerator {
+        url = "https://github.com/OpenTTD/nml";
+        version = "0.7.6";
+        hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
+        option = 4;
+      };
+
     in
     {
       legacyPackages.${system} = {
-        textFile = autoPackage;
-        textFile1 = autoPackage1;
-        packagesFile = pkgs.writeTextFile {
+
+        
+        #User generated flake
+        textFile = autoPackage; #Text version
+        packagesFile = pkgs.writeTextFile { #File creation version
           name = "flake-nix";
-          destination = "/flake.nix";
+          destination = "/automatic/flake.nix";
           text = autoPackage;
         };
-        packagesFile1 = pkgs.writeTextFile {
+
+        #Second user generated flake
+        textFile1 = autoPackage1; #Text version
+        packagesFile1 = pkgs.writeTextFile { #File creation version
           name = "flake-nix";
           destination = "/automatic/flake.nix";
           text = autoPackage1;
         };
+
+        #Text version callPackage
+        callPackage1 = automatorFlake.legacyPackages.${system}.callPackage1.packageCallString;
+        #Code version callPackage
+        callPackage2 = pkgs.callPackage automatorFlake.legacyPackages.${system}.callPackage2.packageCall {};
+
+        #User build package nix-2
+        nml = autoPackage3;
+        #User build package nix-2 string
+        nmlString = autoPackage4;
+        
+
+
+        
       };
     };
 }
