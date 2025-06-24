@@ -452,16 +452,10 @@
           };
         };
         callPackage2 = generatePackage {
-          url = "https://github.com/cfoust/cy";
-          rev = "77ea96a";
-          version = "v1.5.1";
-          hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
-          vendorHash = null;
+          url = "https://crates.io/crates/petname";
+          version = "3.0.0-alpha.2";
+          hash = "sha256-6gJkaHAhau2HKKwVa/FL1mZfC9IJkyORm5P8MzLnQ5Q=";
           option = 3; # options - 1 2 3
-          extraArgs = with pkgs; {
-            buildInputs = [ "xorg.libX11" ];
-            doCheck = false;
-          };
         };
         nixPackage1 = generatePackage {
           url = "https://github.com/cfoust/cy";
