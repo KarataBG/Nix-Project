@@ -328,21 +328,24 @@
 
         in if option == 1 then
         # Option 1: direct application build standard nix-2 packet
-          packageDRVandSTR.drv
-
+          generateNixPackage { inherit packageDRVandSTR;}
         else if option == 2 then
         # Option 2: returns a flake with the package
           generateFlake { inherit srcString packageDRVandSTR; }
         else if option == 3 then
         # Option 3: Defines package for callPackage {}
           generateCallPackage {inherit packageDRVandSTR;}
-        else if option == 4 then 
-        # Option 4: Defines nix-2 package 
-        ''
-          with import <nixpkgs> {};
-          ${packageDRVandSTR.str}
-        '' 
         else throw "Invalid option. Please choose 1, 2, or 3.";
+
+      generateNixPackage = {packageDRVandSTR}:
+        let
+          nixCall = packageDRVandSTR.drv;
+          nixCallString = ''
+            with import <nixpkgs> {};
+            ${packageDRVandSTR.str}
+          '';
+        in
+          {inherit nixCall nixCallString;};
 
       generateCallPackage = {packageDRVandSTR}: 
         let
@@ -419,19 +422,19 @@
           version = "v3.0.6";
           hash = "sha256-D3HhkAEW1vxeq6bQhRLe9+i/0u6CUhR6azWwIpudhBI=";
           vendorHash = "sha256-FjNUcNI3A97ngPZBWW+6qL0eCTd10KUGl/AzByXSZt8=";
-          option = 2; # options - 1 2 3 4
+          option = 2; # options - 1 2 3
           extraArgs = { modRoot = "cmd/jwx"; };
         };
         generatedFlake3 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          option = 2; # options - 1 2 3 4
+          option = 2; # options - 1 2 3
         };
         generatedFlake4 = generatePackage {
           url = "https://github.com/evmar/n2";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
-          option = 2; # options - 1 2 3 4
+          option = 2; # options - 1 2 3
         };
         callPackage1 = generatePackage {
           url = "https://github.com/cfoust/cy";
@@ -439,7 +442,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 3; # options - 1 2 3 4
+          option = 3; # options - 1 2 3
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -451,9 +454,9 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 3; # options - 1 2 3 4
+          option = 3; # options - 1 2 3
           extraArgs = with pkgs; {
-            buildInputs = [ xorg.libX11 ];
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
           };
         };
@@ -463,7 +466,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 4; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -473,14 +476,14 @@
           url = "https://github.com/LoLei/razer-cli";
           version = "2.3.0";
           hash = "sha256-uwTqDCYmG/5dyse0tF/CPG+9SlThyRyeHJ0OSBpcQio=";
-          option = 4; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; { };
         };
         nixPackage3 = generatePackage {
           url = "https://codeberg.org/svartstare/pass2csv/";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
-          option = 4; # options - 1 2 3
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; { };
         };
 
@@ -490,9 +493,9 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; {
-            buildInputs = [ xorg.libX11 ];
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
           };
         };
@@ -500,14 +503,14 @@
           url = "https://github.com/OpenTTD/nml";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          option = 2; # options - 1 2 3 4
+          option = 2; # options - 1 2 3
         };
         demoPackage3 =  generatePackage {
           url = "https://github.com/lestrrat-go/jwx";
           version = "v3.0.7";
           hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
           vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
-          option = 3; # options - 1 2 3 4
+          option = 3; # options - 1 2 3
           extraArgs = { modRoot = "cmd/jwx"; };
         };
         
@@ -517,7 +520,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 4; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -543,19 +546,19 @@
           url = "https://github.com/OpenTTD/nml";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
         };
         examplePackage2 = generatePackage {
           url = "https://github.com/OpenTTD/nml";
           version = "0.7.6";
           hash = "sha256-jAvzfmv8iLs4jb/rzRswiAPHZpx20hjfbG/NY4HGcF0=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
         };
         examplePackage3 = generatePackage {
           url = "https://codeberg.org/svartstare/pass2csv/";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
-          option = 4; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; { };
         };
 
@@ -567,19 +570,19 @@
           extraArgs = {
             doCheck = false;
           };
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
         };
         examplePackage5 = generatePackage {
           url = "https://gitlab.com/kornelski/mandown";
           rev = "9da94876";
           hash = "sha256-wEv7h3Kl4EczmsY4FuGOvRgeGf0rgANhONhCKyu6zik=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
         };
         examplePackage6 = generatePackage {
           url = "https://crates.io/crates/petname";
           version = "3.0.0-alpha.2";
           hash = "sha256-6gJkaHAhau2HKKwVa/FL1mZfC9IJkyORm5P8MzLnQ5Q=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
         };
 
         #go
@@ -588,7 +591,7 @@
           version = "v3.0.7";
           hash = "sha256-vR7QsRAVdYmi7wYGsjuQiB1mABq5jx7mIRFiduJRReA=";
           vendorHash = "sha256-fpjkaGkJUi4jrdFvrClx42FF9HwzNW5js3I5HNZChOU=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = { modRoot = "cmd/jwx"; };
         };
         examplePackage8 = generatePackage {
@@ -597,9 +600,9 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; {
-            buildInputs = [ xorg.libX11 ];
+            buildInputs = [ "xorg.libX11" ];
             doCheck = false;
           };
         };

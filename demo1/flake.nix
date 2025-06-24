@@ -36,7 +36,7 @@
           url = "https://gitlab.com/kornelski/mandown";
           rev = "9da94876";
           hash = "sha256-wEv7h3Kl4EczmsY4FuGOvRgeGf0rgANhONhCKyu6zik=";
-          option = 3; # options - 1 2 3 4
+          option = 3; # options - 1 2 3
         };
       autoPackage3 = automatorFlake.legacyPackages.${system}.packageGenerator {
           url = "https://github.com/cfoust/cy";
@@ -44,7 +44,7 @@
           version = "v1.5.1";
           hash = "sha256-lRBggQqi5F667w2wkMrbmTZu7DX/wHD5a4UIwm1s6V4=";
           vendorHash = null;
-          option = 3; # options - 1 2 3 4
+          option = 3; # options - 1 2 3
           extraArgs = {
             buildInputs = [ "xorg.libX11" ];
             doCheck = false;
@@ -53,7 +53,7 @@
       autoPackage4 = automatorFlake.legacyPackages.${system}.packageGenerator {
         url = "https://github.com/evmar/n2";
         hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
-        option = 3; # options - 1 2 3 4
+        option = 3; # options - 1 2 3
         extraArgs = with pkgs; {doCheck = false; };
       };
 
@@ -65,14 +65,14 @@
         url = "https://codeberg.org/svartstare/pass2csv/";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
-          option = 1; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; { };
       };
       autoPackage6 = automatorFlake.legacyPackages.${system}.packageGenerator {
         url = "https://codeberg.org/svartstare/pass2csv/";
           version = "v1.2.0";
           hash = "sha256-AzhKSfuwIcw/iizizuemht46x8mKyBFYjfRv9Qczr6s=";
-          option = 4; # options - 1 2 3 4
+          option = 1; # options - 1 2 3
           extraArgs = with pkgs; {};
       };
 
@@ -109,9 +109,9 @@
         callPackage8 = pkgs.callPackage automatorFlake.legacyPackages.${system}.callPackage2.packageCall {};
 
         #User build package nix-2
-        pass2 = autoPackage5;
+        pass2 = autoPackage5.nixCall;
         #User build package nix-2 string
-        pass2String = autoPackage6;
+        pass2String = autoPackage6.nixCallString;
         
 
 
