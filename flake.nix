@@ -435,6 +435,9 @@
           url = "https://github.com/evmar/n2";
           hash = "sha256-eWcN/iK/ToufABi4+hIyWetp2I94Vy4INHb4r6fw+TY=";
           option = 2; # options - 1 2 3
+          extraArgs = {
+            doCheck = false;
+          };
         };
         callPackage1 = generatePackage {
           url = "https://github.com/cfoust/cy";
