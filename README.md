@@ -16,6 +16,7 @@ git clone https://github.com/KarataBG/Nix-Project
 
 Create a Demo Folder
 mkdir demo
+
 cd demo
 
 Evaluate the Flake
