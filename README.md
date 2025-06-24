@@ -15,6 +15,7 @@ git clone https://github.com/KarataBG/Nix-Project
 1. Testing flake creation/ execution
 
 Create a Demo Folder
+
 mkdir demo
 
 cd demo
