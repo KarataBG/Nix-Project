@@ -15,7 +15,8 @@ git clone https://github.com/KarataBG/Nix-Project
 1. Testing flake creation/ execution
 
 Create a Demo Folder
-mkdir ../demo
+mkdir demo
+cd demo
 
 Evaluate the Flake
 Run the following command to evaluate the flake and generate the flake.nix file or the second command to see the created flake:
