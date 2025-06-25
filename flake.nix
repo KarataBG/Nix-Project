@@ -82,7 +82,7 @@
         } else if websiteSource == "crates.io" then {
           drv = fetchCrate;
           srcString = ''
-            ${if option == 4 then "" else "pkgs."}.fetchCrate {
+            ${if option == 4 then "" else "pkgs."}fetchCrate {
                 pname = "${repo}";
                 hash = "${hash}";
                 version = "${version}";
